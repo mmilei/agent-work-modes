@@ -1,0 +1,12 @@
+{
+  "name": "agent-work-modes",
+  "version": "0.1.0",
+  "description": "Pick how to work a task with coding agents: visual comparison of the forms of work, and setup of the one you choose in your repo.",
+  "author": {
+    "name": "mmilei"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/mmilei/agent-work-modes",
+  "repository": "https://github.com/mmilei/agent-work-modes",
+  "keywords": ["claude-code", "agents", "workflow", "loop", "subagents", "hooks", "skill"]
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "agent-work-modes",
+  "owner": {
+    "name": "mmilei"
+  },
+  "plugins": [
+    {
+      "name": "agent-work-modes",
+      "source": "./",
+      "description": "Pick how to work a task with coding agents: visual comparison of the forms of work, and setup of the one you choose in your repo.",
+      "version": "0.1.0",
+      "license": "MIT"
+    }
+  ]
+}

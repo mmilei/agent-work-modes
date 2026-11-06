@@ -74,9 +74,34 @@ unit not the batch). The script's code steps work on data only: running tests or
 returned through a schema. There is no human input mid-run: if someone has to sign off between stages, each stage
 is its own workflow. Show the phases and the script to the user before running it.
 
+## Before the first loop round (both loop forms)
+
+Agree these with the user and write them at the top of `LOOP-STATE.md`, before the first round runs:
+
+- **Scope.** The items and each item's VERIFY, run by the orchestrator, never by the subagent that wrote the code.
+  Anything visual needs an art-direction reference written down: the look, a concrete asset pack or preview, and how
+  rough a placeholder may stay. VERIFY for visual work stays technical (it checks the build, the numbers, the
+  behaviour), never "it looks right". Visual items still end in a human check.
+- **Budget.** The round cap. Default 10, adjusted to the real size of the work.
+- **Stop rule.** Two failed VERIFYs in a row mark the item `BLOCKED` and the loop moves on. If more than half of the
+  items end `BLOCKED`, the whole run stops and goes back to the user. These defaults hold unless the project asks
+  otherwise.
+- **Model per piece.** Pick the model by the type of work and name it with its version, asking explicitly for the
+  newest one: `Haiku 5.5` or `Sonnet 5.5` for applying a change already specified (a point fix, one component, one
+  string); `Sonnet 5.5` for a bounded feature with moderate design; `Opus 5.5` where judgement is needed (visual
+  hierarchy, security exclusions, architecture). Some agent tools accept only the family alias, so confirm the model
+  that actually ran in the usage log.
+- **Effort.** The orchestrator runs at default effort for bookkeeping (read the state, dispatch, write the status) and
+  higher for the VERIFY of each item and for the final integration pass. A subagent inherits the session's effort; it
+  is not set per call.
+- **Dispatch.** Launch the loop only on a verbal OK from the user. Claude starts it; the user does not paste a
+  launch block.
+- **Usage log.** Before round 1, note the start time and session id in `LOOP-USAGE.md`. After each subagent, append its
+  usage. Commit the work in the project's own repo, never in the orchestrator's repo.
+
 ## Stateful loop - in session
 
-Create in the repo:
+Agree the kickoff items above first, then create in the repo:
 
 - `LOOP-STATE.md`: goal in one line, the item list with one status each (`todo`, `done`, `BLOCKED: <why>`), and the
   VERIFY command per item. Kept short: it is re-read every round.
@@ -89,6 +114,7 @@ session, so prefer the fresh-session loop for long runs.
 
 ## Stateful loop - fresh session
 
+0. Agree the kickoff items above first.
 1. Write `PROMPT.md` in the repo: read `LOOP-STATE.md`, take one item, do it, run its VERIFY, update the state file,
    log evidence to `LOOP-HISTORY.md`, then stop.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.

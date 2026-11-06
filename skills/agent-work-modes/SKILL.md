@@ -65,11 +65,14 @@ install the hook, copy the script, fill the `/goal` line. Then prove it works: r
 round, or show the exact command the user has to type (for what only the user can type, like `/goal` or opening a
 terminal). For any autonomous form, also offer the Gate block at the end of `reference/setup.md`.
 
+For either loop form, agree the kickoff items in `reference/setup.md` ("Before the first loop round") before the first
+round: scope, budget, stop rule, model per piece, effort and dispatch.
+
 Ask before anything outside the repo: creating repos, scheduling routines, pushing.
 
 ## 5. Close
 
 Show the real output of the check or test, not "done". List the files created or changed. If the run will need a
-decision later (the round cap, when to look at it), say it in one line. If something was accepted or ruled out
+decision later (the round cap, when to look at it), say it in one line. For a loop, also report the cost per round and the final count of `BLOCKED` items. If something was accepted or ruled out
 during the run and will matter next time, propose one line for a short list of the repo's constraints that is read
 when planning, not a history.

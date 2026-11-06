@@ -86,9 +86,9 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
 - **Stop rule.** Two failed VERIFYs in a row mark the item `BLOCKED` and the loop moves on. If more than half of the
   items end `BLOCKED`, the whole run stops and goes back to the user. These defaults hold unless the project asks
   otherwise.
-- **Model per piece.** Pick the model by the type of work and name it with its version, asking explicitly for the
-  newest one: `Haiku 5.5` or `Sonnet 5.5` for applying a change already specified (a point fix, one component, one
-  string); `Sonnet 5.5` for a bounded feature with moderate design; `Opus 5.5` where judgement is needed (visual
+- **Model per piece.** Pick the model family by the type of work and always use its newest version: `Haiku` or
+  `Sonnet` for applying a change already specified (a point fix, one component, one
+  string); `Sonnet` for a bounded feature with moderate design; `Opus` where judgement is needed (visual
   hierarchy, security exclusions, architecture). Some agent tools accept only the family alias, so confirm the model
   that actually ran in the usage log.
 - **Effort.** The orchestrator runs at default effort for bookkeeping (read the state, dispatch, write the status) and

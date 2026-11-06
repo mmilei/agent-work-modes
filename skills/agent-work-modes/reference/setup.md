@@ -84,8 +84,8 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
   behaviour), never "it looks right". Visual items still end in a human check.
 - **Budget.** The round cap. Default 10, adjusted to the real size of the work.
 - **Stop rule.** Two failed VERIFYs in a row mark the item `BLOCKED` and the loop moves on. If more than half of the
-  items end `BLOCKED`, the whole run stops and goes back to the user. These defaults hold unless the project asks
-  otherwise.
+  items end `BLOCKED`, the whole run stops and goes back to the user. The fresh-session driver checks this before
+  and after each round, including when the global check would pass.
 - **Model per piece.** Pick the model family by the type of work and always use its newest version: `Haiku` or
   `Sonnet` for applying a change already specified (a point fix, one component, one
   string); `Sonnet` for a bounded feature with moderate design; `Opus` where judgement is needed (visual
@@ -103,12 +103,13 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
 
 Agree the kickoff items above first, then create in the repo:
 
-- `LOOP-STATE.md`: goal in one line, the item list with one status each (`todo`, `done`, `BLOCKED: <why>`), and the
-  VERIFY command per item. Kept short: it is re-read every round.
+- `LOOP-STATE.md`: goal and agreed kickoff rules, followed by a final `## Items` section. Each nonblank line in that
+  section is `- todo: <item> | VERIFY: <command>`, `- done: <item> | VERIFY: <command>`, or
+  `- BLOCKED: <item> | VERIFY: <command> | <why>`. Keep all items, including completed ones, so the driver can count
+  the blocked fraction. Kept short: it is re-read every round.
 - `LOOP-HISTORY.md`: evidence per item (command output, screenshot path). Never re-read by the loop.
 
-Rules to write at the top of `LOOP-STATE.md`: one item per round; VERIFY is run, not described; two failed VERIFYs
-mark the item `BLOCKED` and the loop moves on; anything visual ends in a human check. Then start it with `/loop`
+Run one item per round and execute its VERIFY, following the kickoff rules above. Start it with `/loop`
 and the instruction "take the next `todo` item from LOOP-STATE.md". Warn the user: every round re-reads the whole
 session, so prefer the fresh-session loop for long runs.
 
@@ -120,8 +121,8 @@ session, so prefer the fresh-session loop for long runs.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.
 3. Copy `scripts/fresh-loop.py` to the repo and run one round by hand to see it work:
    `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 1 -- --permission-mode auto`.
-4. Then the real run, from a terminal the user opens:
-   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 20 -- --permission-mode auto`.
+4. Then launch the real run on the user's OK, using the cap agreed at kickoff (the driver requires it explicitly):
+   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <agreed-round-cap> -- --permission-mode auto`.
    `touch STOP` ends it cleanly between rounds.
 5. To see what the run cost, round by round and with any subagents:
    `python scripts/session-cost.py --project <part of the repo folder name>`. On a subscription the amounts are

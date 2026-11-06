@@ -57,7 +57,8 @@ skills/agent-work-modes/
   scripts/page.html     the page template and its diagram renderer
   scripts/stop-gate.py  the Stop-hook gate: blocks until the check passes, gives up after 3 tries or a repeated error
   scripts/test_stop_gate.py  hermetic test of the gate (python scripts/test_stop_gate.py)
-  scripts/fresh-loop.py the fresh-session loop: new `claude -p` per round, stops on pass, cap, STOP file or no progress
+  scripts/fresh-loop.py the fresh-session loop: stops on blocked majority, pass, agreed cap, STOP file or no progress
+  scripts/test_fresh_loop.py hermetic regression checks for the blocked-majority guard and round cap
   scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted
 docs/index.html         the rendered page
 ```

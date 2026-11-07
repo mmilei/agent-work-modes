@@ -22,12 +22,13 @@ Everything in this plugin is written in English, but talk to the user in their l
 
 Translate catalog text when presenting it. Form names, commands and the page's diagrams stay in English.
 
-## 2. Read the task
+## 2. Clarify the task until the choice is grounded
 
 Answer these from the request and the conversation first:
 
-1. Is there a command that proves it is done (tests, build, type check, a measuring script)? Without one there is
-   no loop: the answer is conversation.
+1. What outcome does the user want, and what would count as success? Is there a command that checks it (tests,
+   build, type check, a measuring script)? Without an automated check, rule out autonomous loops, not a bounded
+   independent review or a conversation.
 2. One unit or many? Are the units independent? A wide sweep where nothing may slip through (audit, verification)
    also counts as many.
 3. Will the user stay at the computer, or leave?
@@ -38,14 +39,24 @@ Answer these from the request and the conversation first:
    subscription, quota-heavy forms (in-session loop, workflow, several background sessions) hit the usage limit,
    and API-billed options are out. If it is not in the context, ask.
 
-Only for what is still unclear, ask all the missing questions in one AskUserQuestion call, each with concrete
-options. Never one question at a time.
+Use the conversation and relevant repo evidence before asking. Ask focused questions with concrete options about
+the uncertainties that could change the recommendation. Group related questions when useful; after each answer,
+reassess and ask follow-ups if needed. Do not force every question into one batch or ask again for known answers.
+
+Recommend only when you can explain the desired outcome, how success will be judged, the relevant constraints
+and why one form fits better than the alternatives. This is sufficient evidence, not certainty: if a decisive
+unknown cannot be resolved by asking or inspecting, name it and propose a small bounded probe instead of guessing.
 
 ## 3. Present two or three candidates
 
 Walk `decision_tree` in the catalog for the first cut, then add the forms from the `addon` and `between` groups that
 fit (handoff when it continues tomorrow, background sessions when the user leaves with parallel tasks, advisor on a
 long task with few key decisions). Never all of them. Steer away from agent teams and from leaving a maximum-effort mode on (`why.md`).
+
+Before recommending subagents or a workflow, name its concrete benefit over direct work in the existing "for"
+column: useful parallelism, isolation of context, or an independent check. Several pieces alone do not justify
+delegation. Keep direct work among the candidates when it fits, including several small changes. An explicit
+request for an independent review already supplies that benefit.
 
 Render the page with the candidates highlighted and open it:
 
@@ -62,7 +73,7 @@ the user picks.
 
 Follow the form's section in `reference/setup.md`, in the repo from question 6. Do all of it: write the files,
 install the hook, copy the script, fill the `/goal` line. Then prove it works: run the hook test, a single loop
-round, or show the exact command the user has to type (for what only the user can type, like `/goal` or opening a
+round on a real representative unit, or show the exact command the user has to type (for what only the user can type, like `/goal` or opening a
 terminal). For any autonomous form, also offer the Gate block at the end of `reference/setup.md`.
 
 For either loop form, agree the kickoff items in `reference/setup.md` ("Before the first loop round") before the first
@@ -73,6 +84,7 @@ Ask before anything outside the repo: creating repos, scheduling routines, pushi
 ## 5. Close
 
 Show the real output of the check or test, not "done". List the files created or changed. If the run will need a
-decision later (the round cap, when to look at it), say it in one line. For a loop, also report the cost per round and the final count of `BLOCKED` items. If something was accepted or ruled out
+decision later (the round cap, when to look at it), say it in one line. For a loop, report available usage and the
+final count of `BLOCKED` items; identify measurement sources and mark unavailable data as unknown. If something was accepted or ruled out
 during the run and will matter next time, propose one line for a short list of the repo's constraints that is read
 when planning, not a history.

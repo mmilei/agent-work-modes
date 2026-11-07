@@ -38,7 +38,8 @@ not ten. The user opens sessions; do not open terminal tabs on your own.
 ## Stop-hook gate
 
 1. Copy `scripts/stop-gate.py` to `<repo>/.claude/hooks/stop-gate.py`.
-2. Add to `<repo>/.claude/settings.json` (merge, do not overwrite):
+2. Choose shared `<repo>/.claude/settings.json` or personal `.claude/settings.local.json` with the user, following
+   existing repo conventions. Merge, do not overwrite; do not delete or blanket-ignore `.claude/`. Add:
    ```json
    "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "python .claude/hooks/stop-gate.py \"<check>\"", "timeout": 600}]}]}
    ```
@@ -47,7 +48,7 @@ not ten. The user opens sessions; do not open terminal tabs on your own.
    decision; a passing one prints nothing.
 4. A new hook may only apply from the next session.
 
-The script lets the turn end on the 3rd failure or on a repeated error, and Claude Code itself stops a Stop hook
+The script blocks three failures and lets the turn end on the fourth, or earlier on a repeated error. Claude Code itself stops a Stop hook
 after 8 blocks in a row without any tool use. The check only runs when the repo changed, so a plain chat does not
 trigger the tests. To change the gate later, run `python scripts/test_stop_gate.py` against the edited copy.
 
@@ -86,18 +87,22 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
 - **Stop rule.** Two failed VERIFYs in a row mark the item `BLOCKED` and the loop moves on. If more than half of the
   items end `BLOCKED`, the whole run stops and goes back to the user. The fresh-session driver checks this before
   and after each round, including when the global check would pass.
-- **Model per piece.** Pick the model family by the type of work and always use its newest version: `Haiku` or
-  `Sonnet` for applying a change already specified (a point fix, one component, one
-  string); `Sonnet` for a bounded feature with moderate design; `Opus` where judgement is needed (visual
-  hierarchy, security exclusions, architecture). Some agent tools accept only the family alias, so confirm the model
-  that actually ran in the usage log.
-- **Effort.** The orchestrator runs at default effort for bookkeeping (read the state, dispatch, write the status) and
-  higher for the VERIFY of each item and for the final integration pass. A subagent inherits the session's effort; it
-  is not set per call.
+- **Model and effort.** Respect the user's selected model and budget. Among available models, bounded mechanical
+  work may suit a cheaper model (for example Haiku or Sonnet); difficult judgement may justify a stronger one
+  (for example Opus). Agree changes before dispatch, rather than always choosing the newest version. Use effort
+  controls only where supported; do not assume per-call control. Record the actual model when available.
 - **Dispatch.** Launch the loop only on a verbal OK from the user. Claude starts it; the user does not paste a
-  launch block.
+  launch block. Include in that OK whether a successful first unit permits unattended continuation within the
+  unchanged scope and remaining cap, or whether the user wants to review it first.
 - **Usage log.** Before round 1, note the start time and session id in `LOOP-USAGE.md`. After each subagent, append its
-  usage. Commit the work in the project's own repo, never in the orchestrator's repo.
+  available usage and elapsed time, with their source; mark missing measurements as unknown. API-price estimates
+  are not subscription-quota percentages. Commit the work in the project's own repo, never in the orchestrator's repo.
+
+Use the first real representative unit as the setup proof; keep its work and count every attempted round within
+the agreed total cap. Check the unit's requested behavior and the permissions actually exercised, not just the
+build. If the unit fails, required permissions are denied, or the evidence does not establish its behavior, stop
+and adjust before scaling. Missing telemetry alone does not invalidate completed work. Use existing history and
+usage files; a successful unit does not establish the quality or cost of the whole run.
 
 ## Stateful loop - in session
 
@@ -121,12 +126,17 @@ session, so prefer the fresh-session loop for long runs.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.
 3. Copy `scripts/fresh-loop.py` to the repo and run one round by hand to see it work:
    `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 1 -- --permission-mode auto`.
-4. Then launch the real run on the user's OK, using the cap agreed at kickoff (the driver requires it explicitly):
-   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <agreed-round-cap> -- --permission-mode auto`.
+   Judge this unit by its VERIFY and evidence: the driver may exit 1 because the global completion check still
+   fails while items remain. Session errors, denied permissions and failed unit VERIFYs still require attention.
+4. After accepting that unit, continue according to the kickoff agreement. Subtract all attempted rounds from the
+   total cap; do not repeat completed units. If no rounds remain or the goal is already met, do not relaunch.
+   Otherwise use the positive remainder (not the original cap):
+   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <remaining-round-cap> -- --permission-mode auto`.
    `touch STOP` ends it cleanly between rounds.
 5. To see what the run cost, round by round and with any subagents:
    `python scripts/session-cost.py --project <part of the repo folder name>`. On a subscription the amounts are
-   ccusage's API-price estimate, a measure of quota.
+   ccusage's API-price estimate, not actual charges or a quota percentage. Prompt-based loop grouping is heuristic;
+   use session IDs and the usage log to identify the actual run.
 
 Nobody answers permission prompts inside `claude -p`, so an action that would ask is denied. `acceptEdits` and the
 default mode only approve file edits: every Bash call (the VERIFY, the build, `git commit`) is denied and the round
@@ -156,7 +166,7 @@ Nothing goes in without a yes. Suggest a cadence (weekly) and let the user decid
 
 ## Gate, in any autonomous form
 
-Offer to add to `<repo>/.claude/settings.json` if missing:
+Offer to add to the shared or personal settings file chosen for this setup, if missing:
 
 ```json
 "permissions": {

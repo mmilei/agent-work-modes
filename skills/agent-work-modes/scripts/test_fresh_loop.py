@@ -14,7 +14,7 @@ def state(*statuses):
     return "Goal: test\n\n## Items\n" + "\n".join(f"- {s}: item | VERIFY: check" for s in statuses)
 
 
-def run(before, after=None, *, cap="3", passes=False, stop=False):
+def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0):
     rounds, checks = [], []
 
     def command(cmd, **kwargs):
@@ -23,6 +23,7 @@ def run(before, after=None, *, cap="3", passes=False, stop=False):
             return subprocess.CompletedProcess(cmd, 0 if passes else 1)
         if cmd[0] == "claude":
             rounds.append(cmd)
+            return subprocess.CompletedProcess(cmd, session_code)
         return subprocess.CompletedProcess(cmd, 0, stdout=str(len(rounds)))
 
     def read(path, **kwargs):
@@ -61,4 +62,8 @@ for invalid in ("", "Goal only", state(), state("todo") + "\n- invalid: item"):
     assert code and rounds == checks == 0, "malformed or missing item lists must fail closed"
 code, rounds, checks, _ = run("", stop=True)
 assert code == 0 and rounds == checks == 0, "manual STOP must still work"
+code, rounds, checks, _ = run(state("todo"), passes=True, session_code=1)
+assert code and rounds == 1 and checks == 0, "a failed session cannot be approved by a passing global check"
+code, rounds, checks, output = run(state("todo", "todo"), state("done", "todo"), cap="1")
+assert code == 1 and rounds == 1 and "round cap" in output, "a completed pilot unit need not complete the global goal"
 print("ok")

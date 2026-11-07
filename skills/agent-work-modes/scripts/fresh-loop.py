@@ -54,7 +54,9 @@ for n in range(1, args.rounds + 1):
         sys.exit(print("fresh-loop: STOP file found") or 0)
     check_blocked()
     print(f"fresh-loop: round {n}/{args.rounds}", flush=True)
-    subprocess.run(["claude", "-p", prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
+    result = subprocess.run(["claude", "-p", prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
+    if result.returncode:
+        sys.exit(f"fresh-loop: session failed with exit code {result.returncode}; inspect its evidence before continuing")
     check_blocked()
     if check_passes():
         sys.exit(print(f"fresh-loop: check passed after {n} rounds") or 0)

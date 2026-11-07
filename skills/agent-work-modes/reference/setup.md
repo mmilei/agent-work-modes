@@ -38,7 +38,8 @@ not ten. The user opens sessions; do not open terminal tabs on your own.
 ## Stop-hook gate
 
 1. Copy `scripts/stop-gate.py` to `<repo>/.claude/hooks/stop-gate.py`.
-2. Add to `<repo>/.claude/settings.json` (merge, do not overwrite):
+2. Choose shared `<repo>/.claude/settings.json` or personal `.claude/settings.local.json` with the user, following
+   existing repo conventions. Merge, do not overwrite; do not delete or blanket-ignore `.claude/`. Add:
    ```json
    "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "python .claude/hooks/stop-gate.py \"<check>\"", "timeout": 600}]}]}
    ```
@@ -47,7 +48,7 @@ not ten. The user opens sessions; do not open terminal tabs on your own.
    decision; a passing one prints nothing.
 4. A new hook may only apply from the next session.
 
-The script lets the turn end on the 3rd failure or on a repeated error, and Claude Code itself stops a Stop hook
+The script blocks three failures and lets the turn end on the fourth, or earlier on a repeated error. Claude Code itself stops a Stop hook
 after 8 blocks in a row without any tool use. The check only runs when the repo changed, so a plain chat does not
 trigger the tests. To change the gate later, run `python scripts/test_stop_gate.py` against the edited copy.
 
@@ -74,32 +75,68 @@ unit not the batch). The script's code steps work on data only: running tests or
 returned through a schema. There is no human input mid-run: if someone has to sign off between stages, each stage
 is its own workflow. Show the phases and the script to the user before running it.
 
+## Before the first loop round (both loop forms)
+
+Agree these with the user and write them at the top of `LOOP-STATE.md`, before the first round runs:
+
+- **Scope.** The items and each item's VERIFY, run by the orchestrator, never by the subagent that wrote the code.
+  Anything visual needs an art-direction reference written down: the look, a concrete asset pack or preview, and how
+  rough a placeholder may stay. VERIFY for visual work stays technical (it checks the build, the numbers, the
+  behaviour), never "it looks right". Visual items still end in a human check.
+- **Budget.** The round cap. Default 10, adjusted to the real size of the work.
+- **Stop rule.** Two failed VERIFYs in a row mark the item `BLOCKED` and the loop moves on. If more than half of the
+  items end `BLOCKED`, the whole run stops and goes back to the user. The fresh-session driver checks this before
+  and after each round, including when the global check would pass.
+- **Model and effort.** Respect the user's selected model and budget. Among available models, bounded mechanical
+  work may suit a cheaper model (for example Haiku or Sonnet); difficult judgement may justify a stronger one
+  (for example Opus). Agree changes before dispatch, rather than always choosing the newest version. Use effort
+  controls only where supported; do not assume per-call control. Record the actual model when available.
+- **Dispatch.** Launch the loop only on a verbal OK from the user. Claude starts it; the user does not paste a
+  launch block. Include in that OK whether a successful first unit permits unattended continuation within the
+  unchanged scope and remaining cap, or whether the user wants to review it first.
+- **Usage log.** Before round 1, note the start time and session id in `LOOP-USAGE.md`. After each subagent, append its
+  available usage and elapsed time, with their source; mark missing measurements as unknown. API-price estimates
+  are not subscription-quota percentages. Commit the work in the project's own repo, never in the orchestrator's repo.
+
+Use the first real representative unit as the setup proof; keep its work and count every attempted round within
+the agreed total cap. Check the unit's requested behavior and the permissions actually exercised, not just the
+build. If the unit fails, required permissions are denied, or the evidence does not establish its behavior, stop
+and adjust before scaling. Missing telemetry alone does not invalidate completed work. Use existing history and
+usage files; a successful unit does not establish the quality or cost of the whole run.
+
 ## Stateful loop - in session
 
-Create in the repo:
+Agree the kickoff items above first, then create in the repo:
 
-- `LOOP-STATE.md`: goal in one line, the item list with one status each (`todo`, `done`, `BLOCKED: <why>`), and the
-  VERIFY command per item. Kept short: it is re-read every round.
+- `LOOP-STATE.md`: goal and agreed kickoff rules, followed by a final `## Items` section. Each nonblank line in that
+  section is `- todo: <item> | VERIFY: <command>`, `- done: <item> | VERIFY: <command>`, or
+  `- BLOCKED: <item> | VERIFY: <command> | <why>`. Keep all items, including completed ones, so the driver can count
+  the blocked fraction. Kept short: it is re-read every round.
 - `LOOP-HISTORY.md`: evidence per item (command output, screenshot path). Never re-read by the loop.
 
-Rules to write at the top of `LOOP-STATE.md`: one item per round; VERIFY is run, not described; two failed VERIFYs
-mark the item `BLOCKED` and the loop moves on; anything visual ends in a human check. Then start it with `/loop`
+Run one item per round and execute its VERIFY, following the kickoff rules above. Start it with `/loop`
 and the instruction "take the next `todo` item from LOOP-STATE.md". Warn the user: every round re-reads the whole
 session, so prefer the fresh-session loop for long runs.
 
 ## Stateful loop - fresh session
 
+0. Agree the kickoff items above first.
 1. Write `PROMPT.md` in the repo: read `LOOP-STATE.md`, take one item, do it, run its VERIFY, update the state file,
    log evidence to `LOOP-HISTORY.md`, then stop.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.
 3. Copy `scripts/fresh-loop.py` to the repo and run one round by hand to see it work:
    `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 1 -- --permission-mode auto`.
-4. Then the real run, from a terminal the user opens:
-   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 20 -- --permission-mode auto`.
+   Judge this unit by its VERIFY and evidence: the driver may exit 1 because the global completion check still
+   fails while items remain. Session errors, denied permissions and failed unit VERIFYs still require attention.
+4. After accepting that unit, continue according to the kickoff agreement. Subtract all attempted rounds from the
+   total cap; do not repeat completed units. If no rounds remain or the goal is already met, do not relaunch.
+   Otherwise use the positive remainder (not the original cap):
+   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <remaining-round-cap> -- --permission-mode auto`.
    `touch STOP` ends it cleanly between rounds.
 5. To see what the run cost, round by round and with any subagents:
    `python scripts/session-cost.py --project <part of the repo folder name>`. On a subscription the amounts are
-   ccusage's API-price estimate, a measure of quota.
+   ccusage's API-price estimate, not actual charges or a quota percentage. Prompt-based loop grouping is heuristic;
+   use session IDs and the usage log to identify the actual run.
 
 Nobody answers permission prompts inside `claude -p`, so an action that would ask is denied. `acceptEdits` and the
 default mode only approve file edits: every Bash call (the VERIFY, the build, `git commit`) is denied and the round
@@ -129,7 +166,7 @@ Nothing goes in without a yes. Suggest a cadence (weekly) and let the user decid
 
 ## Gate, in any autonomous form
 
-Offer to add to `<repo>/.claude/settings.json` if missing:
+Offer to add to the shared or personal settings file chosen for this setup, if missing:
 
 ```json
 "permissions": {

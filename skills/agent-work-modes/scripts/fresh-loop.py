@@ -1,15 +1,16 @@
 """Fresh-session loop: one new `claude -p` session per round, state kept in files.
 
-    python fresh-loop.py --prompt PROMPT.md --check "npm test" [--rounds 20] [--stall 3] [-- <extra claude args>]
+    python fresh-loop.py --prompt PROMPT.md --check "npm test" --rounds <agreed-cap> [--stall 3] [-- <extra claude args>]
 
 Each round runs `claude -p <contents of PROMPT.md>` in the current directory, then the check.
-Stops when: the check passes, the round cap is hit, a file named STOP appears, or the repo did not change for
+Stops when: most items in LOOP-STATE.md are BLOCKED, the check passes, the round cap is hit, STOP appears, or the repo did not change for
 --stall rounds in a row (no progress). The prompt should tell the agent to read and update its own state file.
 Extra arguments after `--` go to claude as is, e.g. `-- --permission-mode auto --model sonnet`.
 Not acceptEdits: inside `claude -p` it denies every Bash call, so the rounds cannot run their VERIFY.
 On Windows the check runs through cmd.exe.
 """
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,10 +18,24 @@ from pathlib import Path
 ap = argparse.ArgumentParser()
 ap.add_argument("--prompt", required=True, help="file with the prompt sent every round")
 ap.add_argument("--check", required=True, help="command that exits 0 when the work is done")
-ap.add_argument("--rounds", type=int, default=20)
+ap.add_argument("--rounds", type=int, required=True, help="round cap agreed at kickoff")
 ap.add_argument("--stall", type=int, default=3, help="rounds without repo changes before stopping")
 args, extra = ap.parse_known_args()
 extra = [a for a in extra if a != "--"]
+if args.rounds < 1:
+    ap.error("--rounds must be positive")
+
+
+def check_blocked():
+    state = Path("LOOP-STATE.md").read_text(encoding="utf-8")
+    _, heading, items = state.partition("\n## Items\n")
+    rows = [line for line in items.splitlines() if line.strip()]
+    statuses = [re.fullmatch(r"- (todo|done|BLOCKED): .+", line) for line in rows]
+    if not heading or not rows or not all(statuses):
+        sys.exit("fresh-loop: invalid LOOP-STATE.md; expected final ## Items section with - todo/done/BLOCKED: item rows")
+    blocked = sum(match[1] == "BLOCKED" for match in statuses)
+    if blocked * 2 > len(statuses):
+        sys.exit(f"fresh-loop: {blocked}/{len(statuses)} items BLOCKED; returning to the user")
 
 
 def repo_state():
@@ -37,8 +52,12 @@ stalled, last = 0, repo_state()
 for n in range(1, args.rounds + 1):
     if Path("STOP").exists():
         sys.exit(print("fresh-loop: STOP file found") or 0)
+    check_blocked()
     print(f"fresh-loop: round {n}/{args.rounds}", flush=True)
-    subprocess.run(["claude", "-p", prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
+    result = subprocess.run(["claude", "-p", prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
+    if result.returncode:
+        sys.exit(f"fresh-loop: session failed with exit code {result.returncode}; inspect its evidence before continuing")
+    check_blocked()
     if check_passes():
         sys.exit(print(f"fresh-loop: check passed after {n} rounds") or 0)
     now = repo_state()

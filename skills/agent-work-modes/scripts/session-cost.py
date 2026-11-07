@@ -2,17 +2,19 @@
 
     python session-cost.py [--since YYYYMMDD] [--project <text>] [--json <ccusage session --json output>]
 
-Runs `npx ccusage session --json` (or reads a saved output), joins every session with its transcript under
+Runs a pinned ccusage release through npx (or reads a saved output), joins every session with its transcript under
 ~/.claude/projects, and prints one row per session plus totals per group. Sessions whose first prompt is the same
 (the rounds of one fresh-session loop) form one group; Agent/Task calls and subagent transcripts are counted per
-session. Costs are ccusage's API-price estimate: on a subscription they measure quota, not money.
+session. Costs are API-price estimates, not actual charges or subscription-quota percentages.
+Prompt-based grouping is heuristic; use session IDs and the run's usage log for exact attribution.
 """
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -20,13 +22,25 @@ ap.add_argument("--since", default=date.today().strftime("%Y%m%d"))
 ap.add_argument("--project", default="", help="only transcripts whose project folder contains this text")
 ap.add_argument("--json", help="saved output of `ccusage session --json`, instead of running it")
 args = ap.parse_args()
+try:
+    if len(args.since) != 8 or not args.since.isascii() or not args.since.isdigit():
+        raise ValueError
+    datetime.strptime(args.since, "%Y%m%d")
+except ValueError:
+    ap.error("--since must be a valid date in YYYYMMDD format")
 sys.stdout.reconfigure(encoding="utf-8")
 
 if args.json:
     raw = Path(args.json).read_text(encoding="utf-8")
 else:
-    raw = subprocess.run("npx -y ccusage@latest session --json --since " + args.since, shell=True,
-                         capture_output=True, text=True, encoding="utf-8").stdout
+    npx = shutil.which("npx")
+    if not npx:
+        sys.exit("session-cost: npx not found; install Node.js or use --json with saved ccusage output")
+    result = subprocess.run([npx, "-y", "ccusage@20.0.37", "session", "--json", "--since", args.since],
+                            capture_output=True, text=True, encoding="utf-8")
+    if result.returncode:
+        sys.exit(f"session-cost: ccusage failed: {result.stderr.strip()}")
+    raw = result.stdout
 sessions = json.loads(raw)["session"]
 files = {f.stem: f for f in (Path.home() / ".claude" / "projects").glob("*/*.jsonl")}
 

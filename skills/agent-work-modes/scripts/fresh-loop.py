@@ -11,8 +11,10 @@ On Windows the check runs through cmd.exe.
 
 --lean trims what every round loads before reading the prompt (measured 51k -> 17k tokens on a real repo): only the
 tools a round needs (--tools, default Bash,Read,Edit,Write,Glob,Grep,Monitor; add Agent if rounds delegate), no
-skills, no MCP servers, and no CLAUDE.md from folders above the repo. --measure runs one trivial session with the
-same flags and prints that startup context, without running the loop.
+skills, no MCP servers, and no CLAUDE.md from folders above the repo root (above the current folder outside a repo).
+--lean writes its own --settings, so it refuses a --settings passed after `--`. --measure runs one trivial session
+with the same flags (one real model call, hooks included) and prints that startup context instead of running the loop;
+--prompt, --check and --rounds are still required.
 """
 import argparse
 import json
@@ -36,20 +38,30 @@ if args.rounds < 1:
 
 
 def lean_flags():
-    top = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip() or ".")
-    above = [str(p / name) for p in top.resolve().parents for name in ("CLAUDE.md", "CLAUDE.local.md") if (p / name).is_file()]
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    except FileNotFoundError:
+        top = ""
+    above = [(p / name).as_posix() for p in Path(top or ".").resolve().parents
+             for name in ("CLAUDE.md", "CLAUDE.local.md") if (p / name).is_file()]
     flags = ["--tools", args.tools, "--disable-slash-commands", "--strict-mcp-config"]
     return flags + (["--settings", json.dumps({"claudeMdExcludes": above})] if above else [])
 
 
 if args.lean:
+    if "--settings" in extra:
+        ap.error("--lean sets --settings itself; add claudeMdExcludes to your settings instead of passing both")
     extra = lean_flags() + extra
 if args.measure:
-    out = subprocess.run(["claude", "-p", "Reply only: ok", "--output-format", "json", *extra],
-                         stdin=subprocess.DEVNULL, capture_output=True, text=True).stdout
-    u = json.loads(out)["usage"]
-    tokens = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
-    sys.exit(print(f"fresh-loop: startup context {tokens:,} tokens, re-read on every step of every round") or 0)
+    result = subprocess.run(["claude", "-p", "Reply only: ok", "--output-format", "json", *extra],
+                            stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    try:
+        u = json.loads(result.stdout)["usage"]
+        tokens = u["input_tokens"] + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+    except (ValueError, KeyError, TypeError):
+        sys.exit(f"fresh-loop: --measure failed (exit {result.returncode}): {(result.stderr or result.stdout).strip()[:300]}")
+    print(f"fresh-loop: startup context {tokens:,} tokens, re-read on every step of every round")
+    sys.exit(0)
 
 
 def check_blocked():

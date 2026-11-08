@@ -6,7 +6,8 @@ Runs a pinned ccusage release through npx (or reads a saved output), joins every
 ~/.claude/projects, and prints one row per session plus totals per group. Sessions whose first prompt is the same
 (the rounds of one fresh-session loop) form one group; Agent/Task calls and subagent transcripts are counted per
 session. `ctx` is the context of the session's first and largest model call (the startup load is re-read on every
-step); `rewrites` counts calls that wrote the whole context to cache again, which happens after the cache expired.
+step; a resumed session starts at its resume point); `rewrites` counts calls that wrote most of the context to cache
+again after at least 5 minutes without calls, the sign of an expired cache.
 Costs are API-price estimates, not actual charges or subscription-quota percentages.
 Prompt-based grouping is heuristic; use session IDs and the run's usage log for exact attribution.
 """
@@ -49,7 +50,7 @@ files = {f.stem: f for f in (Path.home() / ".claude" / "projects").glob("*/*.jso
 
 def first_prompt_and_tools(f):
     """First prompt, Agent calls, start time and context per model call: startup, peak, and cache rewrites."""
-    prompt, agents, start, ctx, rewrites, seen = "", 0, "", [], 0, set()
+    prompt, agents, start, ctx, rewrites, seen, last = "", 0, "", [], 0, set(), None
     for line in f.open(encoding="utf-8", errors="replace"):
         try:
             e = json.loads(line)
@@ -67,8 +68,13 @@ def first_prompt_and_tools(f):
                 seen.add(key)
                 write = u.get("cache_creation_input_tokens") or 0
                 total = (u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0) + write
-                rewrites += bool(ctx and total > 20000 and write * 2 > total)  # cache expired: whole context written again
+                if not total:  # synthetic or error entries carry no context
+                    continue
+                now = datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00")) if e.get("timestamp") else None
+                paused = bool(last and now and (now - last).total_seconds() >= 300)  # the shortest cache lifetime
+                rewrites += bool(ctx and paused and total > 20000 and write * 2 > total)  # whole context written again
                 ctx.append(total)
+                last = now or last
     return " ".join(prompt.split())[:70], agents, start, (ctx[0] if ctx else 0), max(ctx, default=0), rewrites
 
 

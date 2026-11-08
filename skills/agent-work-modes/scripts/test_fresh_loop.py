@@ -16,13 +16,16 @@ def state(*statuses):
     return "Goal: test\n\n## Items\n" + "\n".join(f"- {s}: item | VERIFY: check" for s in statuses)
 
 
-def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0, flags=()):
+def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0, flags=(), measured=""):
     rounds, checks = [], []
 
     def command(cmd, **kwargs):
         if kwargs.get("shell"):
             checks.append(cmd)
             return subprocess.CompletedProcess(cmd, 0 if passes else 1)
+        if cmd[0] == "claude" and "--output-format" in cmd:  # --measure
+            rounds.append(cmd)
+            return subprocess.CompletedProcess(cmd, session_code, stdout=measured, stderr="auth failed")
         if cmd[0] == "claude":
             rounds.append(cmd)
             return subprocess.CompletedProcess(cmd, session_code)
@@ -84,4 +87,13 @@ assert len(excluded) == 1 and Path(excluded[0]).parent.name == "parent", "--lean
 assert cmd[-2:] == ["--model", "sonnet"], "user args come last so they can override"
 run(state("todo"), cap="1", flags=["--lean", "--tools", "Bash,Read,Agent"])
 assert LAST[0][LAST[0].index("--tools") + 1] == "Bash,Read,Agent", "--tools overrides the lean list"
+code, rounds, _, _ = run(state("todo"), flags=["--lean", "--", "--settings", "{}"])
+assert code == 2 and rounds == 0, "a user --settings would silently drop the lean CLAUDE.md exclusion"
+usage = '{"usage": {"input_tokens": 3, "cache_read_input_tokens": 17000, "cache_creation_input_tokens": 200}}'
+code, rounds, checks, output = run(state("todo"), flags=["--lean", "--measure"], measured=usage)
+assert code == 0 and rounds == 1 and checks == 0 and "17,203 tokens" in output, "--measure reports and runs no loop"
+assert "--disable-slash-commands" in LAST[0], "--measure uses the same flags as the rounds"
+for bad in ("", "Login required", '{"is_error": true}', "[]"):
+    code, _, checks, output = run(state("todo"), flags=["--measure"], measured=bad, session_code=1)
+    assert code and code != 0 and checks == 0 and "--measure failed" in str(code), "a failed measure explains itself"
 print("ok")

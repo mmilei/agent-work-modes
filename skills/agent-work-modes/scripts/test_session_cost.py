@@ -43,4 +43,31 @@ code, calls, _ = run([], executable=None)
 assert code and not calls, "missing npx must give an explicit error"
 code, calls, _ = run([], returncode=1)
 assert code and len(calls) == 1, "do not parse failed command output as usage"
+
+
+def call(mid, read, write, ts):
+    usage = {"input_tokens": 5, "cache_read_input_tokens": read, "cache_creation_input_tokens": write, "output_tokens": 9}
+    return {"type": "assistant", "requestId": mid, "timestamp": ts, "message": {"id": mid, "usage": usage, "content": []}}
+
+
+import json
+import tempfile
+with tempfile.TemporaryDirectory() as home:
+    folder = Path(home, ".claude", "projects", "repo")
+    folder.mkdir(parents=True)
+    lines = [{"type": "user", "timestamp": "2026-11-01T10:00:00Z", "message": {"content": "do it"}},
+             call("a", 0, 40000, "2026-11-01T10:00:01Z"),
+             call("a", 0, 40000, "2026-11-01T10:00:01Z"),   # same call logged twice: count once
+             call("b", 40000, 2000, "2026-11-01T10:00:05Z"),
+             call("c", 0, 42000, "2026-11-01T13:00:00Z")]  # cache expired: whole context written again
+    Path(folder, "s1.jsonl").write_text("\n".join(json.dumps(x) for x in lines), encoding="utf-8")
+    saved = Path(home, "ccusage.json")
+    saved.write_text(json.dumps({"session": [{"period": "s1", "totalCost": 1.0, "totalTokens": 1, "modelsUsed": ["claude-x"]}]}))
+    output = io.StringIO()
+    output.reconfigure = lambda **kw: None
+    with patch.object(sys, "argv", [SCRIPT, "--json", str(saved)]), patch.object(Path, "home", return_value=Path(home)), \
+         contextlib.redirect_stdout(output):
+        runpy.run_path(SCRIPT, run_name="__main__")
+    assert "ctx 40k>42k" in output.getvalue(), "startup and peak context per session"
+    assert "rewrites 1" in output.getvalue(), "count a full cache rewrite after a pause, not the first write"
 print("ok")

@@ -83,6 +83,24 @@ undone before, and last the model's self-assessment.
 - If the quota runs out mid-workflow, the run waits for the reset only in an interactive session. Under `claude -p`,
   the agents fail.
 
+## Context is what you pay
+
+Every step of an agent (each tool call) re-sends the whole session so far. Measured over five days of a real
+project (245 sessions, 2026-10-30 to 11-03), the volume was half cache reads and a third cache writes; the work
+itself, the output, was 15%. Three things drove it:
+
+- **Startup context.** Each fresh loop round loaded 51k tokens before reading its prompt (tool list ~20k, skills,
+  MCP servers, and a `CLAUDE.md` from a parent folder that does not apply) and re-read it on every one of its ~18
+  steps: half of what the rounds read. Loading only what the round needs brought it to 17k, about a third less per
+  round. A general-purpose subagent starts at 36k; one defined with three tools, at 16k.
+- **Long sessions that keep talking.** Interactive sessions and the sessions that watched the loops ran on the
+  biggest model at 150-400k context: 60% of the spend, a third of it re-reading what was already said.
+- **Waking a big session after a long pause.** The main session's cache lasts one hour; after that the next message
+  writes the whole context again, at a higher rate than reading it. 34 times, after a median pause of 3.4 hours:
+  12-18% of those sessions' cost. A run watcher woken by a monitor on every round paid this shape too.
+
+The amounts are API-price estimates: how each kind of token weighs on a subscription's quota is not published.
+
 ## What does not pay off
 
 - **Agent teams:** experimental, spend considerably more tokens, and do not run under `claude -p`.

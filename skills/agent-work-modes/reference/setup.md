@@ -58,6 +58,23 @@ One subagent per piece, with the piece as its prompt (never the whole goal), `is
 and the model picked per piece: a small one for mechanical work, a big one where judgement matters. The orchestrator
 runs the final check itself; a worker's "done" is a claim, not evidence.
 
+A subagent pays its startup context on every step, and the general-purpose one loads every tool (36k tokens against
+16k for one with three tools, `why.md`). When the same kind of piece repeats, define it once in
+`<repo>/.claude/agents/<name>.md` with only the tools it uses and its model:
+
+```markdown
+---
+name: <name>
+description: <when to use it, one line>
+tools: Read, Grep, Glob, Bash
+model: <haiku|sonnet|opus>
+---
+<what it does, what it returns, and the shape of the answer>
+```
+
+Ask for a short answer with its evidence (path, command output), not a narration: the result lands in the
+orchestrator's context and is re-read from then on.
+
 ## Advisor
 
 Add to a long form, do not replace it: a cheaper main model plus `/advisor <bigger model>`. Write down the moments it
@@ -124,14 +141,18 @@ session, so prefer the fresh-session loop for long runs.
 1. Write `PROMPT.md` in the repo: read `LOOP-STATE.md`, take one item, do it, run its VERIFY, update the state file,
    log evidence to `LOOP-HISTORY.md`, then stop.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.
-3. Copy `scripts/fresh-loop.py` to the repo and run one round by hand to see it work:
-   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 1 -- --permission-mode auto`.
+3. Copy `scripts/fresh-loop.py` to the repo. Measure what each round loads before reading its prompt, and keep
+   `--lean` unless the rounds need skills, MCP servers or a parent `CLAUDE.md` (add tools with `--tools`, e.g.
+   `Agent` if rounds delegate):
+   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 1 --lean --measure -- --permission-mode auto`.
+   Then run one round by hand to see it work:
+   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 1 --lean -- --permission-mode auto`.
    Judge this unit by its VERIFY and evidence: the driver may exit 1 because the global completion check still
    fails while items remain. Session errors, denied permissions and failed unit VERIFYs still require attention.
 4. After accepting that unit, continue according to the kickoff agreement. Subtract all attempted rounds from the
    total cap; do not repeat completed units. If no rounds remain or the goal is already met, do not relaunch.
    Otherwise use the positive remainder (not the original cap):
-   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <remaining-round-cap> -- --permission-mode auto`.
+   `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <remaining-round-cap> --lean -- --permission-mode auto`.
    `touch STOP` ends it cleanly between rounds.
 5. To see what the run cost, round by round and with any subagents:
    `python scripts/session-cost.py --project <part of the repo folder name>`. On a subscription the amounts are
@@ -147,6 +168,24 @@ available, keep the default mode and allow the exact commands the rounds need in
 Hooks still run inside each `claude -p` session; if the repo has the Stop-hook gate, it judges every round too.
 If you turn hooks off for the loop (`disableAllHooks`), the gate goes off with them: let it through or the rounds
 run unjudged.
+
+## Watching a run (loops, workflows, background sessions)
+
+The session that launched or watches a run is usually the most expensive part of it: big model, big context, woken
+again and again (`why.md`). Keep it cheap:
+
+- **No per-round wake-ups into a big session.** Do not attach a monitor that wakes the main session on every round.
+  Let the run write its state (`LOOP-STATE.md`, its log) and read it only when someone asks.
+- **A status report reads files, not memory.** Answer "how is it going" from the state file and the last log lines,
+  from a short session if the watching one is already large.
+- **Hand off instead of resuming.** Before a pause of more than an hour, or once the context passes ~100k, write a
+  handoff (what runs, where its state lives, what is pending) and continue in a new session. Resuming after the
+  cache expired rewrites the whole context.
+- **The watcher does not need the biggest model.** Relaying status and relaunching rounds is mechanical; keep the
+  strong model for the decisions the run escalates.
+
+`python scripts/session-cost.py --since <YYYYMMDD>` shows each session's startup and peak context, and how many
+times it rewrote its cache after a pause, next to its cost.
 
 ## Cloud routine
 

@@ -8,8 +8,14 @@ Stops when: most items in LOOP-STATE.md are BLOCKED, the check passes, the round
 Extra arguments after `--` go to claude as is, e.g. `-- --permission-mode auto --model sonnet`.
 Not acceptEdits: inside `claude -p` it denies every Bash call, so the rounds cannot run their VERIFY.
 On Windows the check runs through cmd.exe.
+
+--lean trims what every round loads before reading the prompt (measured 51k -> 17k tokens on a real repo): only the
+tools a round needs (--tools, default Bash,Read,Edit,Write,Glob,Grep,Monitor; add Agent if rounds delegate), no
+skills, no MCP servers, and no CLAUDE.md from folders above the repo. --measure runs one trivial session with the
+same flags and prints that startup context, without running the loop.
 """
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -20,10 +26,30 @@ ap.add_argument("--prompt", required=True, help="file with the prompt sent every
 ap.add_argument("--check", required=True, help="command that exits 0 when the work is done")
 ap.add_argument("--rounds", type=int, required=True, help="round cap agreed at kickoff")
 ap.add_argument("--stall", type=int, default=3, help="rounds without repo changes before stopping")
+ap.add_argument("--lean", action="store_true", help="load only what a round needs (see above)")
+ap.add_argument("--tools", default="Bash,Read,Edit,Write,Glob,Grep,Monitor", help="tool list for --lean")
+ap.add_argument("--measure", action="store_true", help="print the startup context of one round and exit")
 args, extra = ap.parse_known_args()
 extra = [a for a in extra if a != "--"]
 if args.rounds < 1:
     ap.error("--rounds must be positive")
+
+
+def lean_flags():
+    top = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip() or ".")
+    above = [str(p / name) for p in top.resolve().parents for name in ("CLAUDE.md", "CLAUDE.local.md") if (p / name).is_file()]
+    flags = ["--tools", args.tools, "--disable-slash-commands", "--strict-mcp-config"]
+    return flags + (["--settings", json.dumps({"claudeMdExcludes": above})] if above else [])
+
+
+if args.lean:
+    extra = lean_flags() + extra
+if args.measure:
+    out = subprocess.run(["claude", "-p", "Reply only: ok", "--output-format", "json", *extra],
+                         stdin=subprocess.DEVNULL, capture_output=True, text=True).stdout
+    u = json.loads(out)["usage"]
+    tokens = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+    sys.exit(print(f"fresh-loop: startup context {tokens:,} tokens, re-read on every step of every round") or 0)
 
 
 def check_blocked():

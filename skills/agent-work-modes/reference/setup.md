@@ -187,6 +187,48 @@ again and again (`why.md`). Keep it cheap:
 `python scripts/session-cost.py --since <YYYYMMDD>` shows each session's startup and peak context, and how many
 times it rewrote its cache after a pause, next to its cost.
 
+## Loop status board
+
+`scripts/loop-status.py` (with `loop-status.html` next to it) serves a live page for a loop from its own files:
+item graph, round lifecycle, the current round's tool calls, live processes, results, commits, screenshots, and a
+history view across loops. It reads files and rebuilds on every request, so it costs the watching session nothing.
+Python standard library only.
+
+Launch it detached, so it outlives the session that started it (pick a free port):
+
+```
+python scripts/loop-status.py --loop-dir loops/<x> --loops-glob "loops/*" --repo . --log <fresh-loop output file> --port 8765
+```
+
+Windows, hidden and detached:
+`Start-Process python -ArgumentList 'scripts/loop-status.py','--loop-dir','loops/<x>','--port','8765' -WindowStyle Hidden`.
+To stop it, kill the `python` process whose command line contains `loop-status.py` and its port.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--loop-dir` | cwd | The current loop's folder |
+| `--loops-glob` | `<loop-dir parent>/*` | Sibling loops for the history view; only folders with a `LOOP-STATE.md` count |
+| `--repo` (alias `--game-dir`) | none | Repo whose commits and tags are shown |
+| `--screenshots` | `<repo>/screenshots` | Folder served at `/shots/` |
+| `--transcripts` | none | Claude Code transcript folder (`~/.claude/projects/<mangled-path>`) for the "current round" card |
+| `--log` | none | Output file of `fresh-loop.py`, for the round counter and per-round results |
+| `--port` | 8765 | Binds 127.0.0.1 only |
+| `--title` | repo or loop folder name | Page title |
+
+Every flag except `--loop-dir` is optional; a missing input renders as an empty card.
+
+Formats it reads:
+
+- `LOOP-STATE.md`: a table `| # | Item | Depends | State | Tries |`. Column order comes from the header row, and the
+  Spanish headers `Ítem`, `Depende`, `Estado`, `Intentos` work too. States: `todo`, `done`, `BLOCKED...`; the first
+  `todo` whose dependencies are done is shown as in progress.
+- `LOOP-HISTORY.md`: one entry per event, `### YYYY-MM-DD HH:MM — item N: title`, then the evidence text. A title with
+  `BLOCKED` is a block; one with `unblocked` or `relaunched` is an unblock; anything else counts as done.
+- `result*.json` in the loop folder: the JSON of a `claude -p --output-format json` run, for the spend card.
+
+Routes: `/` current loop · `/historia` history of all loops (data from `/historia.json`) · `/historia/clasico`
+server-rendered history · `/shots/<file>` screenshots from `--screenshots`.
+
 ## Cloud routine
 
 `/schedule` with the description. Only when the work lives on GitHub and needs no local files. A pattern that works:

@@ -256,10 +256,12 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const T = s => new Date(s).getTime();
 const hm = s => s.slice(11, 16), dm = s => s.slice(8, 10) + '/' + s.slice(5, 7);
 const num = (x, d=0) => x.toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+// loop-status.py --snapshot sets window.SNAPSHOT: data comes from static files next to the page and the chat is read-only
+const SRC = window.SNAPSHOT ? {h: 'history.json', f: 'flow.json', c: 'chat.json'} : {h: '/history.json', f: '/flow.json', c: '/chat'};
 let D = null, sel = null, EV = [];
 
 async function load() {
-  try { D = await (await fetch('/history.json', {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
+  try { D = await (await fetch(SRC.h, {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
   // a bare "done" header says nothing: use the first sentence of the evidence as the headline
   EV = D.loops.flatMap((l, li) => l.ev.map(e => ({...e, li, loop: l.name,
     title: /^done\b/i.test(e.title) && e.body ? e.body.split(/(?<=[.:])\s|\n/)[0].slice(0, 140) : e.title})));
@@ -525,7 +527,7 @@ const LK = {done:'done', now:'running now', todo:'todo', waiting:'waiting', gate
 const short = (s, n = 74) => s.length > n ? s.slice(0, n - 1) + '…' : s;
 
 async function loadFlow() {
-  try { F = await (await fetch('/flow.json', {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
+  try { F = await (await fetch(SRC.f, {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
   FB = Object.fromEntries(F.items.map(i => [i.id, i]));
   $('#lname').textContent = `${F.loop} · ${F.now}`;
   bars(); flowView(); slog();
@@ -621,7 +623,7 @@ document.addEventListener('click', e => {
 });
 let chatN = -1;
 async function loadChat() {
-  let M; try { M = await (await fetch('/chat', {cache:'no-store'})).json(); } catch (e) { return; }
+  let M; try { M = await (await fetch(SRC.c, {cache:'no-store'})).json(); } catch (e) { return; }
   if (M.length === chatN) return; chatN = M.length;
   const box = $('#msgs');
   box.innerHTML = M.map(m => `<div class="msg ${m.from === 'user' ? 'user' : 'orchestrator'}"><div class="mh">${m.from === 'user' ? 'you' : 'orchestrator'} · ${esc(m.ts.replace('T', ' ').slice(0, 19))}</div>
@@ -652,9 +654,14 @@ document.addEventListener('mousemove', ev => {
 });
 document.addEventListener('click', ev => { const d = ev.target.closest('.dot'); if (d) detail(EV[+d.dataset.e].li, true); });
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (F) flowView(); if (!D) return; timeline(); if (sel !== null) edges(Object.fromEntries(D.loops[sel].items.map(i => [i.id, i]))); }, 150); });
-loadFlow(); setInterval(loadFlow, 15000);
-loadChat(); setInterval(loadChat, 3000);
-load(); setInterval(load, 60000);
+loadFlow(); loadChat(); load();
+if (window.SNAPSHOT) {
+  $('#ct').disabled = $('#cf button').disabled = true;
+  $('#ct').placeholder = 'Static snapshot. On a live board this message goes to the orchestrator inbox.';
+  document.querySelectorAll('a[href="/classic"]').forEach(a => a.remove());
+} else {
+  setInterval(loadFlow, 15000); setInterval(loadChat, 3000); setInterval(load, 60000);
+}
 </script>
 </body>
 </html>

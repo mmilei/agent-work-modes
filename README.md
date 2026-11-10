@@ -2,16 +2,28 @@
 
 A Claude Code plugin for the question that comes before the work: **how should the agent attack this task?**
 
+Anthropic has published a lot on how to run coding agents: long-running harnesses, context engineering, hooks,
+subagents, which model to build with, how to scale multi-agent teams. It is good material, spread across an
+engineering blog, a product blog and two sets of docs, and none of it tells you what to do with the task in front of
+you right now. This plugin is that material turned into a skill. We read the official articles and docs listed under
+[Sources](#sources), pulled out every way of working they describe, scored each one on the same six axes, drew it, and
+checked it against real projects. The skill then does the part that was missing: it looks at your task, recommends
+two or three forms, and sets up the one you pick in your repo.
+
 A long conversation, a `/goal` with a judge, a Stop hook that refuses to let the turn end until the tests pass,
 subagents, a workflow graph, a loop that runs for hours with nobody around. Each form has a different cost in quota,
 in setup and in how much you still understand at the end, and picking the wrong one is expensive in a way you only
-notice afterwards. This skill asks until it has enough evidence to recommend a form, shows two or three candidates on a visual page, and once you pick,
-sets that form up in your repo.
+notice afterwards.
 
-[![The page: diagrams, decision tree, autonomy map](docs/preview.png)](docs/index.html)
+[![The page: diagrams, decision tree, autonomy map](docs/preview.png)](https://mmilei.github.io/agent-work-modes/)
 
-**[See the page](docs/index.html)** (once GitHub Pages is enabled from `docs/`, it lives at <https://mmilei.github.io/agent-work-modes/>): one diagram per form, a decision tree, a map of autonomy against quota, and a
-six-axis profile.
+- **[The catalog](https://mmilei.github.io/agent-work-modes/)**: one diagram per form, a decision tree, a map of
+  autonomy against quota, and a six-axis profile.
+- **[A loop board](https://mmilei.github.io/agent-work-modes/board/)**: the live board the skill sets up for a loop,
+  frozen at the end of the run that built this plugin (25 items, the flow by dependencies, progress, session log and
+  the chat with the orchestrator). Local paths and private names were removed; the chat is rebuilt from two decisions
+  taken during that run. On a real loop it refreshes itself and the chat writes to the orchestrator's inbox
+  (`scripts/loop-status.py`, `--snapshot` makes a static copy like this one).
 
 ## Two layers
 
@@ -23,7 +35,8 @@ six-axis profile.
 | **Principles** | Always on, under every form | Context rot · Retry cap · Progressive disclosure · Context discipline · Generator-evaluator · Over-constraint · Blast-radius gate |
 
 Every form is scored 0-3 on six axes where higher is always better: low setup, low quota, autonomy, low re-read,
-stays on track, understanding. The scores are ordinal judgement from the sources below, not measurements.
+stays on track, understanding. The scores are ordinal judgement from the sources below; quota and re-read also show
+the tokens measured on one benchmark run per form (`bench/`).
 
 ## Install
 
@@ -38,6 +51,10 @@ Then ask something like "how should we work this?" or "should this be a loop?".
 
 1. **Talks in your language.** It reads `language` from your Claude Code settings; if there is none, it asks once
    and remembers it in `~/.claude/agent-work-modes.json`. The catalog and the diagrams stay in English.
+1. **Works with other agents too.** Run under Codex, Gemini, opencode or another non-Claude model, or ask to mix
+   providers, and it asks once who orchestrates and who does the work: CLI, model and effort for each kind of piece.
+   The answer goes to `~/.claude/agent-work-modes.json` for every repo, or to a gitignored
+   `.agent-work-modes.local.json` for one repo, and the fresh-session loop runs that CLI (`fresh-loop.py --cli`).
 2. **Reads the task** from the request and the conversation: is there a command that proves it is done, how many
    independent pieces, are you staying, how long, what is irreversible. It asks focused questions with options,
    follows up while an answer could change the choice, and stops asking once the recommendation is grounded.
@@ -63,7 +80,9 @@ skills/agent-work-modes/
   scripts/test_fresh_loop.py hermetic regression checks for the blocked-majority guard and round cap
   scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted, startup/peak context and cache rewrites per session
   scripts/test_session_cost.py offline checks for command arguments, dates and usage-tool failures
+  scripts/loop-status.py the loop board: live flow, progress, session log, chat to the orchestrator (--snapshot: static copy)
 docs/index.html         the rendered page
+docs/board/             static snapshot of the loop board that built this plugin
 ```
 
 After editing the catalog: `python skills/agent-work-modes/scripts/render.py`.
@@ -150,9 +169,15 @@ The trade-offs on the page come from using these forms on real projects. Some of
 
 ## Sources
 
-- Anthropic, [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
-- Anthropic, [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
-- [Claude Code hooks](https://code.claude.com/docs/en/hooks)
+Every claim in the catalog points to one of these (`methods.json`, `sources`):
+
+- Anthropic engineering, [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+- Anthropic engineering, [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- Claude blog, [Which Claude model should you build with](https://claude.dev/blog/which-claude-model-should-you-build-with/)
+- Claude blog, [Safely scaling multi-agent teams with Fable 5.2](https://claude.dev/blog/safely-scaling-multi-agent-teams-with-fable-5-2/)
+- Claude Code docs, [Hooks](https://code.claude.com/docs/en/hooks)
+- Claude Code docs, [Subagents](https://code.claude.com/docs/en/sub-agents)
+- Claude Platform docs, [Optimizing for cost and intelligence](https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence)
 
 ## License
 

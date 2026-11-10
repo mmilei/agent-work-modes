@@ -22,6 +22,28 @@ Everything in this plugin is written in English, but talk to the user in their l
 
 Translate catalog text when presenting it. Form names, commands and the page's diagrams stay in English.
 
+## 1b. Models and providers
+
+The catalog's model advice is written for Claude. Before recommending models, read `orchestration` from
+`.agent-work-modes.local.json` in the repo, else from `~/.claude/agent-work-modes.json`. If neither has it and you
+are not a Claude model (Codex, Gemini, opencode or any other harness), or the user wants to mix providers, ask in
+one AskUserQuestion round: which CLI and model orchestrates, which ones do the work (per kind of piece: mechanical
+edits, code, review), and at what effort. Do not invent model IDs or flags: confirm each with the CLI's `--help` or
+its model list. Save the answer:
+
+```json
+{"orchestration": {
+  "orchestrator": {"cli": "codex exec", "model": "<id>", "effort": "medium"},
+  "workers": [{"for": "mechanical edits", "cli": "gemini -p", "model": "<id>", "effort": "low"}],
+  "judge": {"cli": "claude -p", "model": "<id>", "effort": "high"}
+}}
+```
+
+in `~/.claude/agent-work-modes.json` when it holds for every repo, or in `.agent-work-modes.local.json` when it
+holds for this repo only; add that file to the repo's `.gitignore` in the same step. From then on, every candidate's
+model and effort, and the fresh-session loop's `--cli` and model flags (`reference/setup.md`), come from this file.
+The ordering rules in `why.md` ("Model and effort") still apply: one model per session, effort before model.
+
 ## 2. Clarify the task until the choice is grounded
 
 Answer these from the request and the conversation first:

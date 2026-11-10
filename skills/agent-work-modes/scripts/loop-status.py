@@ -1,7 +1,7 @@
 """Live status board for a stateful loop (see reference/setup.md).
 
     python loop-status.py [--loop-dir DIR] [--loops-glob GLOB] [--repo DIR] [--transcripts DIR]
-                          [--log FILE] [--port 8765] [--title NAME]
+                          [--log FILE] [--port 8765] [--title NAME] [--snapshot DIR]
 
 Serves http://127.0.0.1:<port>/ (loop-status.html): the live flow of this loop (one node per item laid out by
 Depends, the driver and the current `claude -p` round with its subagents), progress bars, the session log, a chat
@@ -12,6 +12,9 @@ with the orchestrator and, below, the history of all loops. Data routes, rebuilt
 Chat: POST /chat {"text": ..., "refs": [...]} appends one JSON line {"ts", "from": "user", "text", "refs"} to
 <loop-dir>/orchestrator-inbox.jsonl. The orchestrator session watches that file (Monitor on `tail -f`) and answers by
 appending {"ts", "text"} lines to <loop-dir>/orchestrator-outbox.jsonl; the page shows both.
+
+--snapshot DIR writes the page and its data (flow.json, history.json, chat.json) as static files into DIR and exits,
+without live processes or transcripts: a read-only board that GitHub Pages can serve.
 
 Every input except --loop-dir is optional; a missing one renders as an empty card, never as an error.
 --loop-dir holds LOOP-STATE.md (item table), LOOP-HISTORY.md (one `### YYYY-MM-DD HH:MM - item N: ...` entry per
@@ -49,6 +52,7 @@ ap.add_argument("--transcripts", default="", help="Claude Code transcript folder
 ap.add_argument("--log", default="", help="fresh-loop.py output file")
 ap.add_argument("--port", type=int, default=8765)
 ap.add_argument("--title", default="", help="page title (default: the repo or loop folder name)")
+ap.add_argument("--snapshot", default="", help="write a static read-only board into this folder and exit")
 args = ap.parse_args()
 
 LOOP = Path(args.loop_dir).resolve()
@@ -583,7 +587,7 @@ def flow_data():
             stream.append({"t": datetime.fromisoformat(t).astimezone().strftime(FMT), "kind": "commit", "text": f"{h} {s}"})
         except ValueError:
             continue
-    ps, tr = procs(), transcript()
+    ps, tr = (None, None) if args.snapshot else (procs(), transcript())
     rnd = {"n": int(rounds[-1][0]) if rounds else len(usage), "cap": int(cap), "item": current,
            "driver": None if ps is None else any(p["role"] == "loop" for p in ps),
            "live": None if ps is None else any(p["role"] != "loop" for p in ps),
@@ -694,6 +698,17 @@ class H(BaseHTTPRequestHandler):
         pass
 
 
-if __name__ == "__main__":
+def snapshot(out):
+    out.mkdir(parents=True, exist_ok=True)
+    for name, data in (("flow.json", flow_data()), ("history.json", history_data()), ("chat.json", chat_messages())):
+        (out / name).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    page_html = HIST_HTML.read_text(encoding="utf-8").replace("<script>", "<script>window.SNAPSHOT = true;", 1)
+    (out / "index.html").write_text(page_html, encoding="utf-8")
+    print(f"snapshot written to {out}")
+
+
+if __name__ == "__main__" and args.snapshot:
+    snapshot(Path(args.snapshot))
+elif __name__ == "__main__":
     print(f"loop status: http://127.0.0.1:{args.port}/", flush=True)
     ThreadingHTTPServer(("127.0.0.1", args.port), H).serve_forever()

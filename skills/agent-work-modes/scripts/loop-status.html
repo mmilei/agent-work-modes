@@ -217,7 +217,7 @@ async function load() {
   board(); timeline(); cards(); feed(); spend(); tags(); shots();
   if (sel === null && location.hash) { const h = decodeURIComponent(location.hash.slice(1)); const li = D.loops.findIndex(l => l.name === h); if (li >= 0) sel = li; }
   if (sel !== null) detail(sel, false);
-  $('#now').textContent = 'actualizado ' + D.now;
+  $('#now').textContent = 'updated ' + D.now;
 }
 
 // server-escaped HTML snippets (round, processes, results) come from loop-status.py; the rest is escaped here

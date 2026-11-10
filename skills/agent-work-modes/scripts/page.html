@@ -166,6 +166,7 @@ svg .axl{font-family:var(--f-mono);font-size:10.5px;font-weight:500;fill:var(--m
 <script>
 const DATA = /*DATA*/null;
 const PICK = /*PICK*/[];
+const NOTES = /*NOTES*/null;
 const KIND = {agent:"agent", det:"det", model:"model", human:"human", file:"file", code:"code", none:"none"};
 
 /* Diagram from data: nodes [id, col, row, label, kind], edges [from, to, label, style].
@@ -295,6 +296,7 @@ $("#legend").innerHTML = Object.entries(DATA.kinds).map(([k, l]) => `<span><i st
   `<span><svg width="36" height="12" aria-hidden="true"><path d="M2,10 Q18,-4 34,10" fill="none" style="stroke:var(--human)" stroke-width="2" stroke-dasharray="7 3"/></svg>goes back to fix</span>`;
 $("#tags-forms").innerHTML = F.map(f => `<a href="#${f.id}"${picked(f) ? ' class="pick"' : ""}>${esc(f.name)}</a>`).join("");
 $("#tags-princ").innerHTML = DATA.principles.map(p => `<a href="#${p.id}">${esc(p.name)}</a>`).join("");
+if (NOTES) $("#lede").insertAdjacentHTML("afterend", `<div class="panel" style="margin:14px 0"><div class="ph">In this task</div>${Object.entries(NOTES).map(([id, n]) => `<p class="note"><b>${esc((F.find(f => f.id === id) || {name:id}).name)}</b>: ${esc(n.looks || "")}<br>For: ${esc(n.for || "")}<br>Against: ${esc(n.against || "")}<br>Cost: ${esc(n.cost || "")}</p>`).join("")}</div>`);
 if (PICK.length) $("#lede").insertAdjacentHTML("afterend", `<p class="lede" style="margin-top:10px"><b>Candidates for this task:</b> ${PICK.map(id => esc((F.find(f => f.id === id) || {name:id}).name)).join(" · ")}</p>`);
 
 $("#d-decide").innerHTML = diagram({...DATA.decision_tree, aria:"Decision tree"}, "decide");

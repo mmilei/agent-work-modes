@@ -141,6 +141,7 @@ footer{color:var(--faint);font-size:12px;margin-top:40px}
 .pane .bd,.pane code.v{overflow-wrap:anywhere}
 #lf{gap:44px}#lf .col{width:210px;justify-content:flex-start}
 .badge{font:600 9.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--k);color:var(--k);border-radius:20px;padding:0 6px;white-space:nowrap}
+.full summary{cursor:pointer;color:var(--dim);font:500 12px var(--mono);margin:4px 0}.full[open] summary{margin-bottom:8px}
 .node .w{font:500 10.5px var(--mono);color:var(--k);margin-top:2px}
 .node.pulse{animation:glow 1.6s ease-in-out infinite}@keyframes glow{50%{box-shadow:0 0 0 3px #ffc14540}}
 .node.sub{margin-left:14px;padding:6px 10px}.node.sub .nn{font-size:12px;margin:3px 0 0}
@@ -552,7 +553,7 @@ function flowView() {
     : i.kind === 'blocked' ? i.state.replace(/^BLOCKED:?\s*/, '') : i.kind === 'now' ? (R.live ? 'in the live round' : 'next up') : '';
   const node = i => `<div class="node ${i.kind === 'now' ? 'pulse' : ''}" data-id="${esc(i.id)}" data-retry="${+i.retries}" style="--k:${kc(i.kind)}" title="${esc(i.state)}">
     <div class="nh"><span class="id">#${esc(i.id)}</span><span class="badge">${LK[i.kind]}</span><span class="tr">${+i.tries ? i.tries + (+i.tries > 1 ? ' tries' : ' try') : ''}</span></div>
-    <div class="nn">${esc(short(i.what))}</div>${wait(i) ? `<div class="w">${esc(short(wait(i), 60))}</div>` : ''}
+    <div class="nn">${esc(i.title)}</div>${wait(i) ? `<div class="w">${esc(short(wait(i), 60))}</div>` : ''}
     ${+i.retries ? `<div class="w" style="color:${C.blocked}">↺ failed VERIFY ${i.retries}x, retried</div>` : ''}</div>`;
   const on = v => v === null ? 'unknown' : v ? 'running' : 'stopped';
   const sys = `<div class="col"><div class="col-h">driver and round</div>
@@ -582,14 +583,14 @@ function fpane(id) {
   const i = FB[id], P = $('#lpane'); if (!i) return; fSel = id;
   $('#lf').querySelectorAll('.node').forEach(n => n.classList.toggle('on', n.dataset.id === id));
   const users = F.items.filter(x => x.deps.includes(id));
-  const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc(short(FB[x]?.what || '', 30))}</button>`;
+  const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc(FB[x]?.title || '')}</button>`;
   P.style.setProperty('--k', kc(i.kind));
-  P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
-    <h3>What it does</h3><div class="bd">${rich(i.what)}</div>
+  P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.title)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+    <details class="full"><summary>full item text</summary><div class="bd">${rich(i.what)}</div></details>
     ${i.deps.length ? `<h3>Depends on</h3><div class="deps">${i.deps.map(btn).join('')}</div>` : ''}
     ${i.waits.length && i.kind !== 'done' ? `<h3>Waits on</h3><div class="deps">${i.waits.map(btn).join('')}</div>` : ''}
     ${users.length ? `<h3>Unblocks</h3><div class="deps">${users.map(u => btn(u.id)).join('')}</div>` : ''}
-    <h3>VERIFY</h3>${i.verify ? `<div class="bd"><code class="v">${esc(i.verify)}</code></div>` : '<p class="note">no VERIFY in the item text</p>'}
+    <h3>VERIFY</h3>${i.verify ? `<details class="full"><summary>${esc(short(i.verify, 70))}</summary><div class="bd"><code class="v">${esc(i.verify)}</code></div></details>` : '<p class="note">no VERIFY in the item text</p>'}
     <h3>Evidence</h3>${i.ev.length ? i.ev.map(e => `<div class="pev" style="--k:${C[e.kind]}"><time>${dm(e.t)} ${hm(e.t)}</time><span class="kt">${KIND[e.kind]}</span>
       <div class="tt">${esc(e.title)}</div>${evBody(e.body)}</div>`).join('') : '<p class="note">no LOOP-HISTORY entries for this item</p>'}`;
   P.querySelectorAll('[data-go]').forEach(b => b.onclick = () => fpane(b.dataset.go));

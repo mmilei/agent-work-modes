@@ -70,6 +70,19 @@ def loop_dirs():
     return [(d, d.name.removeprefix(cut) or d.name) for d in dirs]
 
 
+def short_title(text, n=52):
+    """One readable line for a node: drop boilerplate prefixes, keep the first sentence, cut at a word."""
+    t = re.sub(r"^Plan [\w.]+\s*(\([^)]*\))?[.:]?\s*", "", text.strip())
+    t = re.sub(r"^Added by the user [\d-]+\s*(\[\w+\])?:?\s*", "", t)
+    t = re.sub(r"^\(?COST RULE[^)]*\)\.?\s*", "", t)
+    t = t.replace("`", "")
+    t = re.split(r"(?<=\w)\.\s|\sVERIFY:", t)[0].strip(" .")
+    if ": " in t and len(t.split(": ")[0]) >= 12:
+        t = t.split(": ")[0]
+    t = t[0].upper() + t[1:] if t else text[:n]
+    return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + "\u2026"
+
+
 def items(loop=LOOP):
     out, cols = [], ["id", "name", "deps", "state", "tries"]
     for line in (loop / "LOOP-STATE.md").read_text(encoding="utf-8").splitlines():
@@ -553,6 +566,7 @@ def flow_data():
             it["kind"] = "gate"  # a decision gate, not a failure
         what, _, verify = it["name"].partition("VERIFY:")
         it["what"], it["verify"] = what.strip(), verify.strip()
+        it["title"] = short_title(it["what"])
         it["retries"] = max(int(it["tries"]) - (it["kind"] == "done"), 0)  # a pass costs one try, the rest failed
         it["ev"] = [{"t": e["t"].strftime(FMT), "kind": e["kind"], "title": e["name"], "body": e["body"]}
                     for e in ev if e["id"] == it["id"]]

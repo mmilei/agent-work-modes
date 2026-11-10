@@ -197,9 +197,16 @@ times it rewrote its cache after a pause, next to its cost.
 ## Loop status board
 
 `scripts/loop-status.py` (with `loop-status.html` next to it) serves a live page for a loop from its own files:
-item graph, round lifecycle, the current round's tool calls, live processes, results, commits, screenshots, and a
-history view across loops. It reads files and rebuilds on every request, so it costs the watching session nothing.
-Python standard library only.
+a flow of the items laid out by Depends (state badges, what each waits on, retry arrows, the driver and the current
+`claude -p` round with its subagents), progress bars (items, rounds of the cap, tries, tokens and cost), a session log,
+a chat to the orchestrator, and a history view across loops. It reads files and rebuilds on every request, so it costs
+the watching session nothing. Python standard library only, no external requests.
+
+Chat: each message from the page is appended as one JSON line (`ts`, `text`, `refs` = the node, selected text or
+page section the user attached) to `orchestrator-inbox.jsonl` in the loop folder. The orchestrator session watches it
+with Monitor (`tail -n 0 -f orchestrator-inbox.jsonl`) and answers by appending `{"ts": ..., "text": ...}` lines to
+`orchestrator-outbox.jsonl`; the page shows them within a few seconds. Only the page itself can post (same host,
+JSON only).
 
 Launch it detached, so it outlives the session that started it (pick a free port):
 

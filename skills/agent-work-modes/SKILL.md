@@ -1,6 +1,6 @@
 ---
 name: agent-work-modes
-description: "Helps pick how to work a task with coding agents (conversation, /goal with a goal contract, Stop-hook gate, subagents, dynamic workflow, stateful loop in session or with a fresh session per round, plus background sessions, advisor, cloud routine, handoff and a learning inbox), shows the candidates on a visual page with diagrams and a six-axis profile, and once the user picks, sets the chosen form up in their repo. Never picks or launches on its own. Triggers on: how should we work this, which work mode, goal or workflow, should this be a loop, subagents or not, run this in the background, leave it running, continue tomorrow, agent work modes, cómo laburamos esto, cómo lo encaramos, qué forma de trabajo conviene, conviene un loop, dejalo corriendo, sigue mañana."
+description: "Helps pick how to work a task with coding agents (conversation, /goal with a goal contract, Stop-hook gate, subagents, dynamic workflow, stateful loop in session or with a fresh session per round, plus background sessions, advisor, cloud routine, handoff and a learning inbox), shows the candidates on a visual page with diagrams and a six-axis profile, and once the user picks, sets the chosen form up in their repo. Never picks or launches on its own. Use it also when the user wants the agent to work unattended or in the background while they are away. Triggers on: how should we work this, which work mode, goal or workflow, should this be a loop, subagents or not, run this in the background, leave it running, continue tomorrow, agent work modes, cómo laburamos esto, cómo lo encaramos, qué forma de trabajo conviene, conviene un loop, dejalo corriendo, sigue mañana."
 allowed-tools: Read, Write, Edit, Bash, AskUserQuestion
 ---
 
@@ -50,8 +50,9 @@ unknown cannot be resolved by asking or inspecting, name it and propose a small 
 ## 3. Present two or three candidates
 
 Walk `decision_tree` in the catalog for the first cut, then add the forms from the `addon` and `between` groups that
-fit (handoff when it continues tomorrow, background sessions when the user leaves with parallel tasks, advisor on a
-long task with few key decisions). Never all of them. Steer away from agent teams and from leaving a maximum-effort mode on (`why.md`).
+fit (handoff when it continues tomorrow, on top of the tree's form, not instead of it: with a check, /goal still
+fits, one goal per session with the handoff naming the next; background sessions when the user leaves with parallel
+tasks; advisor on a long task with few key decisions). Never all of them. Steer away from agent teams and from leaving a maximum-effort mode on (`why.md`).
 
 Before recommending subagents or a workflow, name its concrete benefit over direct work in the existing "for"
 column: useful parallelism, isolation of context, or an independent check. Several pieces alone do not justify

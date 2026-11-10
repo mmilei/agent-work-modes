@@ -62,16 +62,16 @@ request for an independent review already supplies that benefit.
 Each candidate comes with a starting model and effort (`why.md`, "Model and effort"): one model per session, raise
 effort before changing model.
 
-Render the page with the candidates highlighted and open it:
+Write the per-task notes as JSON (`{"<id>": {"looks": "how it would look in this task", "for": "...", "against": "...",
+"cost": "quota by order of magnitude"}}`), render the page with the candidates highlighted and open it:
 
 ```
-python <this skill>/scripts/render.py --pick <id1>,<id2>[,<id3>] --out <temp dir>/agent-work-modes.html
+python <this skill>/scripts/render.py --pick <id1>,<id2>[,<id3>] --notes <temp dir>/notes.json --out <temp dir>/agent-work-modes.html
 ```
 
-Open it with the OS (`start` on Windows, `open` on macOS, `xdg-open` on Linux). In the chat, one short table: per
-candidate, how it would look **in this task**, for, against, and quota cost by order of magnitude. Close with the
-recommended one and why in one line. If no autonomous form fits, say so and keep talking. Do not start anything until
-the user picks.
+Open it with the OS (`start` on Windows, `open` on macOS, `xdg-open` on Linux). The page shows the notes on top, so
+the chat gets no table: only the recommended candidate and why in one line. If no autonomous form fits, say so and
+keep talking. Do not start anything until the user picks.
 
 ## 4. Set up the chosen form
 

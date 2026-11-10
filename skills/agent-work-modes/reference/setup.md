@@ -48,7 +48,7 @@ not ten. The user opens sessions; do not open terminal tabs on your own.
    decision; a passing one prints nothing.
 4. A new hook may only apply from the next session.
 
-The script blocks three failures and lets the turn end on the fourth, or earlier on a repeated error. Claude Code itself stops a Stop hook
+The script blocks three failures (`--max-tries N` before the check changes that) and lets the turn end on the fourth, or earlier on a repeated error. Claude Code itself stops a Stop hook
 after 8 blocks in a row without any tool use. The check only runs when the repo changed, so a plain chat does not
 trigger the tests. To change the gate later, run `python scripts/test_stop_gate.py` against the edited copy.
 
@@ -125,10 +125,10 @@ usage files; a successful unit does not establish the quality or cost of the who
 
 Agree the kickoff items above first, then create in the repo:
 
-- `LOOP-STATE.md`: goal and agreed kickoff rules, followed by a final `## Items` section. Each nonblank line in that
-  section is `- todo: <item> | VERIFY: <command>`, `- done: <item> | VERIFY: <command>`, or
-  `- BLOCKED: <item> | VERIFY: <command> | <why>`. Keep all items, including completed ones, so the driver can count
-  the blocked fraction. Kept short: it is re-read every round.
+- `LOOP-STATE.md`: goal and agreed kickoff rules, followed by a table `| # | Item | Depends | State | Tries |` with
+  one row per item. State is `todo`, `done` or `BLOCKED: <why>`; put `VERIFY: <command>` in the Item cell (no `|`
+  inside). Keep all items, including completed ones, so the driver can count the blocked fraction. The status board
+  reads the same table. Kept short: it is re-read every round.
 - `LOOP-HISTORY.md`: evidence per item (command output, screenshot path). Never re-read by the loop.
 
 Run one item per round and execute its VERIFY, following the kickoff rules above. Start it with `/loop`
@@ -208,7 +208,7 @@ To stop it, kill the `python` process whose command line contains `loop-status.p
 |---|---|---|
 | `--loop-dir` | cwd | The current loop's folder |
 | `--loops-glob` | `<loop-dir parent>/*` | Sibling loops for the history view; only folders with a `LOOP-STATE.md` count |
-| `--repo` (alias `--game-dir`) | none | Repo whose commits and tags are shown |
+| `--repo` | none | Repo whose commits and tags are shown |
 | `--screenshots` | `<repo>/screenshots` | Folder served at `/shots/` |
 | `--transcripts` | none | Claude Code transcript folder (`~/.claude/projects/<mangled-path>`) for the "current round" card |
 | `--log` | none | Output file of `fresh-loop.py`, for the round counter and per-round results |
@@ -219,14 +219,14 @@ Every flag except `--loop-dir` is optional; a missing input renders as an empty 
 
 Formats it reads:
 
-- `LOOP-STATE.md`: a table `| # | Item | Depends | State | Tries |`. Column order comes from the header row, and the
-  Spanish headers `Ítem`, `Depende`, `Estado`, `Intentos` work too. States: `todo`, `done`, `BLOCKED...`; the first
+- `LOOP-STATE.md`: a table `| # | Item | Depends | State | Tries |`. Column order comes from the header row.
+  States: `todo`, `done`, `BLOCKED...`; the first
   `todo` whose dependencies are done is shown as in progress.
 - `LOOP-HISTORY.md`: one entry per event, `### YYYY-MM-DD HH:MM — item N: title`, then the evidence text. A title with
   `BLOCKED` is a block; one with `unblocked` or `relaunched` is an unblock; anything else counts as done.
 - `result*.json` in the loop folder: the JSON of a `claude -p --output-format json` run, for the spend card.
 
-Routes: `/` current loop · `/historia` history of all loops (data from `/historia.json`) · `/historia/clasico`
+Routes: `/` current loop · `/history` history of all loops (data from `/history.json`) · `/history/classic`
 server-rendered history · `/shots/<file>` screenshots from `--screenshots`.
 
 ## Cloud routine

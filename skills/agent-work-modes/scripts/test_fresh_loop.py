@@ -13,7 +13,8 @@ LAST = []  # claude commands of the last run
 
 
 def state(*statuses):
-    return "Goal: test\n\n## Items\n" + "\n".join(f"- {s}: item | VERIFY: check" for s in statuses)
+    head = "Goal: test\n\n| # | Item | Depends | State | Tries |\n|---|------|---------|-------|-------|\n"
+    return head + "".join(f"| {i} | item - VERIFY: check | - | {s} | 0 |\n" for i, s in enumerate(statuses, 1))
 
 
 def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0, flags=(), measured=""):
@@ -67,7 +68,8 @@ for cap in ("1", "2"):
 for cap in (None, "0", "-1"):
     code, rounds, checks, _ = run(state("todo"), cap=cap)
     assert code == 2 and rounds == checks == 0, "require an explicit positive cap"
-for invalid in ("", "Goal only", state(), state("todo") + "\n- invalid: item"):
+for invalid in ("", "Goal only", state(), state("todo") + "| 9 | item | - | invalid | 0 |\n",
+                "## Items\n- todo: item | VERIFY: check"):
     code, rounds, checks, _ = run(invalid)
     assert code and rounds == checks == 0, "malformed or missing item lists must fail closed"
 code, rounds, checks, _ = run("", stop=True)

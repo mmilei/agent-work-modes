@@ -136,7 +136,7 @@ footer{color:var(--faint);font-size:12px;margin-top:40px}
 <main>
   <header>
     <div class="brand"><small id="proj">PROJECT HISTORY</small>Minute by minute</div>
-    <div class="meta"><span class="live" id="now">—</span><br><a href="/">current loop</a> · <a href="/historia/clasico">classic view</a></div>
+    <div class="meta"><span class="live" id="now">—</span><br><a href="/">current loop</a> · <a href="/history/classic">classic view</a></div>
   </header>
 
   <div class="board" id="board"></div>
@@ -191,7 +191,7 @@ const num = (x, d=0) => x.toLocaleString('en-US', {minimumFractionDigits:d, maxi
 let D = null, sel = null, EV = [];
 
 async function load() {
-  try { D = await (await fetch('/historia.json', {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
+  try { D = await (await fetch('/history.json', {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
   // a bare "done" header says nothing: use the first sentence of the evidence as the headline
   EV = D.loops.flatMap((l, li) => l.ev.map(e => ({...e, li, loop: l.name,
     title: /^done\b/i.test(e.title) && e.body ? e.body.split(/(?<=[.:])\s|\n/)[0].slice(0, 140) : e.title})));

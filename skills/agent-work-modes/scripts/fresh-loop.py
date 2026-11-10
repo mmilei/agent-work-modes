@@ -65,15 +65,23 @@ if args.measure:
 
 
 def check_blocked():
-    state = Path("LOOP-STATE.md").read_text(encoding="utf-8")
-    _, heading, items = state.partition("\n## Items\n")
-    rows = [line for line in items.splitlines() if line.strip()]
-    statuses = [re.fullmatch(r"- (todo|done|BLOCKED): .+", line) for line in rows]
-    if not heading or not rows or not all(statuses):
-        sys.exit("fresh-loop: invalid LOOP-STATE.md; expected final ## Items section with - todo/done/BLOCKED: item rows")
-    blocked = sum(match[1] == "BLOCKED" for match in statuses)
-    if blocked * 2 > len(statuses):
-        sys.exit(f"fresh-loop: {blocked}/{len(statuses)} items BLOCKED; returning to the user")
+    col, states = None, []
+    for line in Path("LOOP-STATE.md").read_text(encoding="utf-8").splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if col is None:  # first table row is the header: find the State column
+            lower = [c.lower() for c in cells]
+            if lower[0] in ("#", "id") and "state" in lower:
+                col = lower.index("state")
+        elif re.fullmatch(r"(?:[A-Z]?\d+[a-z]?|[A-Z])", cells[0]) and len(cells) > col:
+            states.append(cells[col])
+    if not states or not all(re.fullmatch(r"todo|done|BLOCKED.*", s) for s in states):
+        sys.exit("fresh-loop: invalid LOOP-STATE.md; expected a table | # | Item | Depends | State | Tries | "
+                 "with states todo, done or BLOCKED")
+    blocked = sum(s.startswith("BLOCKED") for s in states)
+    if blocked * 2 > len(states):
+        sys.exit(f"fresh-loop: {blocked}/{len(states)} items BLOCKED; returning to the user")
 
 
 def repo_state():

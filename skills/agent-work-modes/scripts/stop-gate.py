@@ -6,8 +6,8 @@ In the repo's .claude/settings.json:
 Runs when the repo changed since the last result: uncommitted changes, or commits the check has not approved yet (an
 agent that commits before ending does not skip it). If nothing changed since it last passed, or since it gave up, it
 does not run: a plain chat does not trigger the tests just because someone else's files are uncommitted.
-Blocks up to 3 times in a row and lets the turn end on the 4th with a warning: three failures on the same thing
-usually mean the plan is wrong. If the same error shows up twice in a row (ignoring numbers such as timings), it lets
+Blocks up to 3 times in a row (`--max-tries N` changes it) and lets the turn end on the next with a warning: three
+failures on the same thing usually mean the plan is wrong. If the same error shows up twice in a row (ignoring numbers such as timings), it lets
 the turn end earlier: there was no progress. After giving up it does not block again until the repo changes.
 On Windows the check runs through cmd.exe: a single command, no chaining with `;`.
 Outside a git repo the gate does nothing.
@@ -26,10 +26,18 @@ MAX_TRIES = 3
 CHECK_TIMEOUT = 570  # a bit under the hook timeout (600), so it warns instead of dying silently
 WINDOWS = os.name == "nt"
 
-if len(sys.argv) < 2:
-    print("usage: stop-gate.py \"<check command>\"", file=sys.stderr)
+argv = sys.argv[1:]
+if "--max-tries" in argv:
+    i = argv.index("--max-tries")
+    try:
+        MAX_TRIES = int(argv[i + 1])
+        del argv[i:i + 2]
+    except (IndexError, ValueError):
+        argv = []
+if not argv:
+    print("usage: stop-gate.py [--max-tries N] \"<check command>\"", file=sys.stderr)
     sys.exit(0)
-check = sys.argv[1]
+check = argv[0]
 try:
     data = json.loads(sys.stdin.buffer.read().decode("utf-8"))
 except ValueError:

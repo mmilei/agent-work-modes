@@ -14,8 +14,8 @@ SAME = f'"{sys.executable}" -c "import sys, time; print(chr(225), time.time()); 
 PASS = f'"{sys.executable}" -c "pass"'
 
 
-def gate(repo, check, sid):
-    r = subprocess.run([sys.executable, GATE, check], cwd=repo, input=json.dumps({"session_id": sid}),
+def gate(repo, check, sid, *flags):
+    r = subprocess.run([sys.executable, GATE, *flags, check], cwd=repo, input=json.dumps({"session_id": sid}),
                        capture_output=True, encoding="utf-8")
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout) if r.stdout.strip() else {}
@@ -60,6 +60,10 @@ with tempfile.TemporaryDirectory() as tmp:
     sid = uuid.uuid4().hex
     assert blocks(gate(repo, SAME, sid))
     assert "twice in a row" in gate(repo, SAME, sid).get("systemMessage", ""), "no progress stops earlier"
+
+    sid = uuid.uuid4().hex
+    assert blocks(gate(repo, FAIL, sid, "--max-tries", "1")), "--max-tries 1: first failure blocks"
+    assert "still fails after 1 tries" in gate(repo, FAIL, sid, "--max-tries", "1").get("systemMessage", ""),         "--max-tries 1: the second failure lets the turn end"
 
     sid = uuid.uuid4().hex
     sh(repo, "add", "-A")

@@ -5,8 +5,8 @@
 
 Serves http://127.0.0.1:<port>/ and rebuilds the page on every request (it refreshes itself every 15 s):
 item graph with state, the fresh-loop lifecycle, what the current round's session is doing (tools, subagents),
-live processes, the round log, commits and screenshots. Routes: / (this loop), /historia (history of all loops,
-fed by /historia.json), /historia/clasico (server-rendered history), /shots/<file> (screenshots).
+live processes, the round log, commits and screenshots. Routes: / (this loop), /history (history of all loops,
+fed by /history.json), /history/classic (server-rendered history), /shots/<file> (screenshots).
 
 Every input except --loop-dir is optional; a missing one renders as an empty card, never as an error.
 --loop-dir holds LOOP-STATE.md (item table), LOOP-HISTORY.md (one `### YYYY-MM-DD HH:MM - item N: ...` entry per
@@ -27,18 +27,17 @@ HERE = Path(__file__).resolve().parent
 HIST_HTML = HERE / "loop-status.html"
 ID = r"(?:[A-Z]?\d+[a-z]?|[A-Z])"
 DASH = r"[\u2014\u2013-]"  # em dash, en dash or hyphen
-ITEM_WORD = r"(?:\u00edtem|item)"
-# header cell (lowercase) -> field; LOOP-STATE.md tables may use either language
-HEADERS = {"#": "id", "id": "id", "\u00edtem": "name", "item": "name", "depende": "deps", "depends": "deps",
-           "estado": "state", "state": "state", "status": "state", "intentos": "tries", "tries": "tries",
-           "attempts": "tries"}
+ITEM_WORD = "item"
+# header cell (lowercase) -> field
+HEADERS = {"#": "id", "id": "id", "item": "name", "depends": "deps",
+           "state": "state", "status": "state", "tries": "tries", "attempts": "tries"}
 esc = html.escape
 EMDASH = "—"
 
 ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
 ap.add_argument("--loop-dir", default=".", help="the current loop's folder (default: cwd)")
 ap.add_argument("--loops-glob", default="", help="sibling loops for the history view (default: <loop-dir parent>/*)")
-ap.add_argument("--repo", "--game-dir", dest="repo", default="", help="repo whose commits, tags and screenshots are shown")
+ap.add_argument("--repo", dest="repo", default="", help="repo whose commits, tags and screenshots are shown")
 ap.add_argument("--screenshots", default="", help="screenshots folder (default: <repo>/screenshots)")
 ap.add_argument("--transcripts", default="", help="Claude Code transcript folder of the loop's sessions")
 ap.add_argument("--log", default="", help="fresh-loop.py output file")
@@ -293,7 +292,7 @@ def page():
     return f"""<!doctype html><html lang=en><head><meta charset=utf-8><meta http-equiv=refresh content=15>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>{esc(TITLE)} \u00b7 loop</title><style>{CSS}</style>
 </head><body><main>
-<h1>{esc(TITLE)} \u00b7 {esc(LOOP.name)}</h1><div class=dim><a href="/historia">project history \u2192</a> \u00b7 {datetime.now():%H:%M:%S} \u00b7 refreshes every 15 s \u00b7 {esc(rnd)}</div>
+<h1>{esc(TITLE)} \u00b7 {esc(LOOP.name)}</h1><div class=dim><a href="/history">project history \u2192</a> \u00b7 {datetime.now():%H:%M:%S} \u00b7 refreshes every 15 s \u00b7 {esc(rnd)}</div>
 <div class=kpis><div class=kpi><b>{n_done}/{len(its)}</b>items done</div>
 <div class=kpi><b>{n_blk}</b>blocked</div>
 <div class=kpi><b>{esc('#' + cur['id'] + ' ' + cur['name'] if cur else EMDASH)}</b>in progress</div></div>
@@ -331,7 +330,7 @@ def loop_events(loop):
         t, i, title, body = m.groups()
         low = title.lower()
         kind = ("blocked" if "BLOCKED" in title else
-                "unblocked" if re.search(r"destrab|unblock|relanz|relaunch|restart", low) else "done")
+                "unblocked" if re.search(r"unblock|relaunch|restart", low) else "done")
         out.append({"t": datetime.strptime(t, "%Y-%m-%d %H:%M"), "id": i, "name": title.strip(), "body": body.strip()[:1200],
                     "kind": kind})
     return out
@@ -444,7 +443,7 @@ def spend(loops):
 
 
 def history_data():
-    """Everything the /historia page draws, as JSON-ready dicts (rebuilt on every request)."""
+    """Everything the /history page draws, as JSON-ready dicts (rebuilt on every request)."""
     loops = []
     for l in all_loops():
         loops.append({"name": l["name"], "items": l["items"], "spend": l["spend"],
@@ -520,11 +519,11 @@ class H(BaseHTTPRequestHandler):
             return
         try:
             ctype = "text/html; charset=utf-8"
-            if self.path.startswith("/historia.json"):
+            if self.path.startswith("/history.json"):
                 body, ctype = json.dumps(history_data(), ensure_ascii=False).encode("utf-8"), "application/json"
-            elif self.path.startswith("/historia/clasico"):
+            elif self.path.startswith("/history/classic"):
                 body = history_page_classic().encode("utf-8")
-            elif self.path.startswith("/historia"):
+            elif self.path.startswith("/history"):
                 body = HIST_HTML.read_bytes()
             else:
                 body = page().encode("utf-8")

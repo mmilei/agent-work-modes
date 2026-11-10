@@ -75,6 +75,13 @@ model: <haiku|sonnet|opus>
 Ask for a short answer with its evidence (path, command output), not a narration: the result lands in the
 orchestrator's context and is re-read from then on.
 
+The built-in Explore subagent runs on the session model (on Opus when the session runs Fable with a subscription).
+To pin it, define an agent of your own with `model:` in its frontmatter, or pass `model` per invocation.
+`CLAUDE_CODE_SUBAGENT_MODEL` sets a default for subagents that name no model but does not change the built-in Explore
+or Plan; add `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` to force one model onto all. Order: per-invocation `model`, then
+frontmatter, then the env var, then the session model (Claude Code subagents docs,
+`code.claude.com/docs/en/sub-agents`, "Choose a model").
+
 ## Advisor
 
 Add to a long form, do not replace it: a cheaper main model plus `/advisor <bigger model>`. Write down the moments it

@@ -1,0 +1,138 @@
+{
+  "about": "Selector evals. expected: form ids that must be among the presented candidates. forbidden: form ids that must not be recommended. Ids come from skills/agent-work-modes/methods.json.",
+  "scenarios": [
+    {
+      "id": "four-small-fixes-with-checks",
+      "request": "How should we do these four small fixes? Each one already has a test that fails until it is fixed.",
+      "context": "Four small, unrelated bug fixes in one repo, each a few lines. Each has an automated check (a failing unit test). User stays at the computer, one sitting. No parallelism, isolation or independent review is needed, so direct work wins.",
+      "expected": ["conversation"],
+      "forbidden": ["subagents", "workflow", "loop", "fresh", "agentview"]
+    },
+    {
+      "id": "no-check-design-decision",
+      "request": "Should this be a loop? I need to decide the module boundaries for the new billing service.",
+      "context": "Design decision; no command can verify success. User stays.",
+      "expected": ["conversation"],
+      "forbidden": ["goal", "stophook", "loop", "fresh", "workflow"]
+    },
+    {
+      "id": "leaving-without-check",
+      "request": "Leave it running while I am out: rewrite the onboarding guide so it reads better.",
+      "context": "Prose rewrite with no automated check. User leaves for the afternoon. No automated check means no autonomous form.",
+      "expected": ["conversation"],
+      "forbidden": ["loop", "fresh", "goal", "stophook", "agentview"]
+    },
+    {
+      "id": "several-small-changes-direct",
+      "request": "Subagents or not? I have six small edits across the config files.",
+      "context": "Six small, related edits; the build checks them. Piece count is the only argument for delegation. User stays.",
+      "expected": ["conversation"],
+      "forbidden": ["subagents", "workflow", "fresh"]
+    },
+    {
+      "id": "one-sitting-feature-with-tests",
+      "request": "Which work mode for adding pagination to the orders API? The integration tests define done.",
+      "context": "One unit of work, one sitting, `npm test` proves it. User stays at the computer.",
+      "expected": ["goal"],
+      "forbidden": ["fresh", "workflow", "routine"]
+    },
+    {
+      "id": "same-done-command-repo",
+      "request": "In this repo done always means `mvn test` passes. How do we stop the agent from ending early on every task?",
+      "context": "Java repo where every task ends with the same command. User works in session.",
+      "expected": ["stophook", "goal"],
+      "forbidden": ["fresh", "workflow", "routine"]
+    },
+    {
+      "id": "continues-tomorrow-with-tests",
+      "request": "Let us refactor the auth module; this will continue tomorrow.",
+      "context": "Multi-day refactor with a test suite as the check. User stays today and resumes tomorrow.",
+      "expected": ["goal", "handoff"],
+      "forbidden": ["workflow", "routine"]
+    },
+    {
+      "id": "continues-tomorrow-no-check",
+      "request": "We are drafting the architecture decision record together and it continues tomorrow.",
+      "context": "Writing, no automated check, spans two days.",
+      "expected": ["conversation", "handoff"],
+      "forbidden": ["loop", "fresh", "goal", "stophook"]
+    },
+    {
+      "id": "many-items-user-stays",
+      "request": "Should this be a loop? Thirty endpoints need input validation, each with its own test.",
+      "context": "Many items, each with a technical VERIFY (its test). User stays around all day.",
+      "expected": ["loop"],
+      "forbidden": ["routine", "inbox"]
+    },
+    {
+      "id": "overnight-long-builds",
+      "request": "Leave it running overnight: migrate 40 modules to the new build plugin.",
+      "context": "Long sequential work; each module is verified by its build and builds take minutes. Nobody around for hours.",
+      "expected": ["fresh"],
+      "forbidden": ["conversation", "loop"]
+    },
+    {
+      "id": "gpu-experiments-unattended",
+      "request": "Run the tuning experiments while I am away and keep the best config.",
+      "context": "Hours of GPU jobs with long waits; a measuring script scores each run. User leaves.",
+      "expected": ["fresh"],
+      "forbidden": ["conversation", "loop", "workflow"]
+    },
+    {
+      "id": "parallel-tasks-while-away",
+      "request": "Run this in the background: bump the logger, fix the flaky date test and add the CSV export. I am going to lunch.",
+      "context": "Three independent tasks, each with tests. User leaves for an hour.",
+      "expected": ["agentview"],
+      "forbidden": ["conversation", "loop"]
+    },
+    {
+      "id": "explicit-independent-review",
+      "request": "Get me an independent review of this PR before I merge it.",
+      "context": "Explicit request for an independent check, which supplies the delegation benefit. No automated check for review quality. User stays.",
+      "expected": ["subagents"],
+      "forbidden": ["loop", "fresh", "workflow", "goal"]
+    },
+    {
+      "id": "context-isolation-investigation",
+      "request": "Subagents or not? I need to find where every retry policy is configured across this monorepo.",
+      "context": "Wide read-only search that would flood the main context; the benefit is context isolation. User stays.",
+      "expected": ["subagents"],
+      "forbidden": ["loop", "fresh", "stophook"]
+    },
+    {
+      "id": "wide-audit-repeated",
+      "request": "Goal or workflow? Audit all 300 services for the deprecated TLS setting; nothing may slip through.",
+      "context": "Repeated, independent units; a script checks each service; coverage is the point and merging results needs explicit coordination.",
+      "expected": ["workflow"],
+      "forbidden": ["routine", "advisor"]
+    },
+    {
+      "id": "periodic-github-task",
+      "request": "Every Monday, open a PR with the dependency updates on our GitHub repo.",
+      "context": "Periodic task on a GitHub repo; does not need the user's machine.",
+      "expected": ["routine"],
+      "forbidden": ["loop", "agentview", "fresh"]
+    },
+    {
+      "id": "hard-in-spots-serial",
+      "request": "Which work mode for porting the parser? Most steps are mechanical but a couple of grammar decisions are tricky.",
+      "context": "Long serial work with a test suite, hard only at a few decisions where a smaller model stalls. User stays.",
+      "expected": ["goal", "advisor"],
+      "forbidden": ["workflow", "subagents"]
+    },
+    {
+      "id": "next-sessions-start-better",
+      "request": "After a dozen long sessions the agent keeps repeating the same mistakes. How should we work this?",
+      "context": "Not one task; the user wants lessons to carry into the next sessions.",
+      "expected": ["inbox"],
+      "forbidden": ["workflow", "fresh", "loop"]
+    },
+    {
+      "id": "vague-outcome",
+      "request": "How should we work this? Make the app better.",
+      "context": "No defined outcome or success criterion; the selector must ask before recommending anything autonomous.",
+      "expected": ["conversation"],
+      "forbidden": ["goal", "stophook", "loop", "fresh", "workflow"]
+    }
+  ]
+}

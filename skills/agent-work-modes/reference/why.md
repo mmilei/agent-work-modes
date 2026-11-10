@@ -101,9 +101,22 @@ itself, the output, was 15%. Three things drove it:
 
 The amounts are API-price estimates: how each kind of token weighs on a subscription's quota is not published.
 
+## Model and effort
+
+Source: [Which Claude model should you build with?](https://claude.dev/blog/which-claude-model-should-you-build-with/) (claude.dev, 2026-11-09).
+
+- **One model per session.** The cache belongs to the model that wrote it: switching rewrites the whole conversation,
+  and going down loses earlier reasoning. Switch at a natural cut (`/compact` or a new session with a short plan).
+- **When the work is not good enough, climb in order:** first let the model verify its own work, then raise effort one
+  level, then move to the next model at a lower effort. Past high, one more effort level can cost as much as the next model.
+- **Small models only where an error is cheap:** finding files, running tests, reading logs. Code edits and judgment
+  calls stay on the main model.
+- **Starting point when unsure:** Opus 5.5 at medium; Sonnet 5.5 for bounded work against a spec; Fable 5.2 for the
+  hardest or longest unattended runs.
+
 ## What does not pay off
 
-- **Agent teams:** experimental, spend considerably more tokens, and do not run under `claude -p`.
+- **Agent teams:** experimental, spend considerably more tokens, and do not run under `claude -p`. At scale they also need infrastructure a subscription session does not give you: [Safely scaling multi-agent teams](https://claude.dev/blog/safely-scaling-multi-agent-teams-with-fable-5-2/) reports a shared machine failing around 100 agents (one lightweight VM per agent instead), a shared database for coordination, and layered monitoring (a real-time classifier that blocks tool calls plus an offline review). The article does not discuss subscription limits; that part is an inference from its token and compute figures.
 - **A maximum-effort mode left on all the time:** it turns every request into a workflow and burns the quota.
 
 ## Not proven yet

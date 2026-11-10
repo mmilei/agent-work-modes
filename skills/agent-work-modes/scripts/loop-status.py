@@ -3,10 +3,15 @@
     python loop-status.py [--loop-dir DIR] [--loops-glob GLOB] [--repo DIR] [--transcripts DIR]
                           [--log FILE] [--port 8765] [--title NAME]
 
-Serves http://127.0.0.1:<port>/ and rebuilds the page on every request (it refreshes itself every 15 s):
-item graph with state, the fresh-loop lifecycle, what the current round's session is doing (tools, subagents),
-live processes, the round log, commits and screenshots. Routes: / (this loop), /history (history of all loops,
-fed by /history.json), /history/classic (server-rendered history), /shots/<file> (screenshots).
+Serves http://127.0.0.1:<port>/ (loop-status.html): the live flow of this loop (one node per item laid out by
+Depends, the driver and the current `claude -p` round with its subagents), progress bars, the session log, a chat
+with the orchestrator and, below, the history of all loops. Data routes, rebuilt on every request: /flow.json,
+/history.json, GET /chat. Other routes: /classic (the older server-rendered page, refreshes every 15 s),
+/history/classic (server-rendered history), /shots/<file> (screenshots).
+
+Chat: POST /chat {"text": ..., "refs": [...]} appends one JSON line {"ts", "from": "user", "text", "refs"} to
+<loop-dir>/orchestrator-inbox.jsonl. The orchestrator session watches that file (Monitor on `tail -f`) and answers by
+appending {"ts", "text"} lines to <loop-dir>/orchestrator-outbox.jsonl; the page shows both.
 
 Every input except --loop-dir is optional; a missing one renders as an empty card, never as an error.
 --loop-dir holds LOOP-STATE.md (item table), LOOP-HISTORY.md (one `### YYYY-MM-DD HH:MM - item N: ...` entry per
@@ -18,6 +23,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -136,9 +142,10 @@ def git(*a, cwd=None):
         return ""
 
 
-def processes():
+def procs():
+    """Live loop processes as [{role, pid, age, cmd}]; None when they cannot be listed (not Windows, query failed)."""
     if os.name != "nt":
-        return "<p class=dim>process list is only implemented on Windows</p>"
+        return None
     ps = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^claude' -or "
           "($_.Name -match '^python' -and $_.CommandLine -match 'fresh-loop') } | "
           "Select-Object ProcessId,ParentProcessId,Name,CreationDate,CommandLine | ConvertTo-Json -Compress")
@@ -146,10 +153,10 @@ def processes():
         raw = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
                              timeout=15, encoding="utf-8", errors="replace").stdout.strip()
         data = json.loads(raw, strict=False) if raw else []  # the round's prompt has raw newlines
-    except Exception as e:  # the page must render even if the process query fails
-        return f"<p class=dim>no process data: {esc(str(e))}</p>"
+    except Exception:  # the page must render even if the process query fails
+        return None
     data = data if isinstance(data, list) else [data]
-    rows = []
+    out = []
     for p in data:
         cmd = p.get("CommandLine") or ""
         if p["Name"].startswith("claude") and " -p " not in f" {cmd} " and "fresh-loop" not in cmd:
@@ -159,18 +166,27 @@ def processes():
         if m:
             secs = int(datetime.now().timestamp() - int(m.group(1)) / 1000)
             age = f"{secs // 60}m {secs % 60:02d}s"
-        role = "loop" if "fresh-loop" in cmd else "round (claude -p)"
-        rows.append(f"<tr><td>{role}</td><td>{p['ProcessId']}</td><td>{age}</td>"
-                    f"<td class=cmd>{esc(cmd[:140])}</td></tr>")
+        out.append({"role": "loop" if "fresh-loop" in cmd else "round (claude -p)", "pid": p["ProcessId"], "age": age,
+                    "cmd": cmd[:140]})
+    return out
+
+
+def processes():
+    data = procs()
+    if data is None:
+        return "<p class=dim>no process data (only listed on Windows)</p>"
+    rows = [f"<tr><td>{p['role']}</td><td>{p['pid']}</td><td>{p['age']}</td><td class=cmd>{esc(p['cmd'])}</td></tr>"
+            for p in data]
     return ("<table><tr><th>role</th><th>pid</th><th>alive for</th><th>command</th></tr>" + "".join(rows)
             + "</table>") if rows else "<p class=dim>nothing running: the loop is stopped</p>"
 
 
-def session():
+def transcript():
+    """The newest transcript: (file, [(time, tool, what)], [(subagent type, description)], last text) or None."""
     files = sorted(TRANSCRIPTS.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True) if (
         TRANSCRIPTS and TRANSCRIPTS.is_dir()) else []
     if not files:
-        return "<p class=dim>no transcripts (pass --transcripts)</p>", ""
+        return None
     f = files[0]
     tools, agents, last_text = [], [], ""
     for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -190,6 +206,14 @@ def session():
                     agents.append((inp.get("subagent_type") or "general", inp.get("description") or ""))
             elif c.get("type") == "text" and c.get("text", "").strip():
                 last_text = c["text"].strip()
+    return f, tools, agents, last_text
+
+
+def session():
+    t = transcript()
+    if not t:
+        return "<p class=dim>no transcripts (pass --transcripts)</p>", ""
+    f, tools, agents, last_text = t
     mtime = datetime.fromtimestamp(f.stat().st_mtime).strftime("%H:%M:%S")
     counts = {}
     for _, n, _ in tools:
@@ -505,7 +529,114 @@ hover for details. Pauses longer than 25 min are compressed and marked with thei
 </main></body></html>"""
 
 
+INBOX, OUTBOX = "orchestrator-inbox.jsonl", "orchestrator-outbox.jsonl"
+CHAT_LOCK = threading.Lock()
+
+
+def read(p):
+    try:
+        return p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def flow_data():
+    """Everything the live flow, the progress bars and the session log draw (rebuilt on every request)."""
+    its, current = items()
+    by = {it["id"]: it for it in its}
+    ev = loop_events(LOOP)
+    for it in its:
+        it["waits"] = [d for d in it["deps"] if by.get(d, {}).get("kind") != "done"]
+        if it["kind"] == "todo" and it["waits"]:
+            it["kind"] = "waiting"
+        elif it["kind"] == "blocked" and "user" in it["state"].lower():
+            it["kind"] = "gate"  # a decision gate, not a failure
+        what, _, verify = it["name"].partition("VERIFY:")
+        it["what"], it["verify"] = what.strip(), verify.strip()
+        it["retries"] = max(int(it["tries"]) - (it["kind"] == "done"), 0)  # a pass costs one try, the rest failed
+        it["ev"] = [{"t": e["t"].strftime(FMT), "kind": e["kind"], "title": e["name"], "body": e["body"]}
+                    for e in ev if e["id"] == it["id"]]
+    log, usage_txt = read(Path(args.log)) if args.log else "", read(LOOP / "LOOP-USAGE.md")
+    rounds = re.findall(r"fresh-loop: round (\d+)/(\d+)", log)
+    usage = re.findall(r"^- \[(\d\d:\d\d)\] (.*)$", usage_txt, re.M)
+    cap = rounds[-1][1] if rounds else (re.findall(r"\bcap (\d+)", read(LOOP / "LOOP-STATE.md") + usage_txt) or [0])[0]
+    day = (re.findall(r"\d{4}-\d\d-\d\d", usage_txt) or [datetime.now().strftime("%Y-%m-%d")])[0]
+    stream = [{"t": f"{day}T{hm}", "kind": "usage", "text": line} for hm, line in usage]
+    stream += [{"t": e["t"].strftime(FMT), "kind": "round", "text": f"item {e['id']}: {e['name']}"} for e in ev]
+    for line in git("log", "-30", "--format=%aI%x09%h%x09%s", cwd=REPO or LOOP).splitlines():
+        try:
+            t, h, s = line.split("\t", 2)
+            stream.append({"t": datetime.fromisoformat(t).astimezone().strftime(FMT), "kind": "commit", "text": f"{h} {s}"})
+        except ValueError:
+            continue
+    ps, tr = procs(), transcript()
+    rnd = {"n": int(rounds[-1][0]) if rounds else len(usage), "cap": int(cap), "item": current,
+           "driver": None if ps is None else any(p["role"] == "loop" for p in ps),
+           "live": None if ps is None else any(p["role"] != "loop" for p in ps),
+           "agents": [{"type": a, "desc": d} for a, d in tr[2]] if tr else [], "tools": len(tr[1]) if tr else 0,
+           "session": tr[0].stem[:8] if tr else "",
+           "last": datetime.fromtimestamp(tr[0].stat().st_mtime).strftime("%H:%M:%S") if tr else ""}
+    return {"title": TITLE, "loop": LOOP.name, "now": datetime.now().strftime("%H:%M:%S"), "items": its,
+            "current": current, "round": rnd, "spend": result_spend(LOOP),
+            "tokens": sum(int(x.replace(",", "")) for _, line in usage for x in re.findall(r"(\d[\d,]*) ?tok", line)),
+            "usd": sum(float(x.replace(",", "")) for _, line in usage for x in re.findall(r"\$(\d[\d,]*(?:\.\d+)?)", line)),
+            "usage": [{"t": hm, "text": line} for hm, line in usage],
+            "log": sorted(stream, key=lambda e: e["t"], reverse=True)[:80]}
+
+
+def chat_messages():
+    out = []
+    for name, who in ((INBOX, "user"), (OUTBOX, "orchestrator")):
+        for line in read(LOOP / name).splitlines():
+            try:
+                m = json.loads(line)
+            except ValueError:
+                m = {"text": line}  # a hand-written plain-text reply still shows up
+            m = m if isinstance(m, dict) else {"text": str(m)}
+            if str(m.get("text", "")).strip():
+                refs = m.get("refs") if who == "user" and isinstance(m.get("refs"), list) else []
+                out.append({"ts": str(m.get("ts", "")), "from": who, "text": str(m["text"]), "refs": refs})
+    return sorted(out, key=lambda m: m["ts"])
+
+
+def add_chat(raw):
+    """Validate one message from the page and append it to the inbox as one JSON line; raises ValueError."""
+    msg = json.loads(raw)
+    text, refs = (msg.get("text"), msg.get("refs", [])) if isinstance(msg, dict) else (None, None)
+    if not (isinstance(text, str) and text.strip() and len(text) <= 8000
+            and isinstance(refs, list) and all(isinstance(r, dict) for r in refs)):
+        raise ValueError("expected {text: non-empty string, refs: [objects]}")
+    rec = {"ts": datetime.now().isoformat(timespec="seconds"), "from": "user", "text": text.strip(), "refs": refs}
+    with CHAT_LOCK, open(LOOP / INBOX, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return rec
+
+
 class H(BaseHTTPRequestHandler):
+    def send(self, code, body, ctype="application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        if self.path != "/chat":
+            return self.send_error(404)
+        mine = {f"127.0.0.1:{args.port}", f"localhost:{args.port}"}
+        origin = self.headers.get("Origin")
+        # the inbox feeds an agent: only this page may write to it (no other site, no DNS rebinding, no form posts)
+        if (self.headers.get("Host") not in mine or (origin and origin.split("://", 1)[-1] not in mine)
+                or not self.headers.get("Content-Type", "").startswith("application/json")):
+            return self.send_error(403)
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > 65536:
+            return self.send_error(413)
+        try:
+            rec = add_chat(self.rfile.read(n))
+        except (ValueError, UnicodeDecodeError) as e:
+            return self.send(400, json.dumps({"error": str(e)}).encode())
+        self.send(200, json.dumps(rec, ensure_ascii=False).encode("utf-8"))
+
     def do_GET(self):
         if self.path.startswith("/shots/"):
             p = (SHOTS / self.path[7:].split("?")[0]).resolve() if SHOTS else None
@@ -518,15 +649,21 @@ class H(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         try:
-            ctype = "text/html; charset=utf-8"
-            if self.path.startswith("/history.json"):
+            ctype, path = "text/html; charset=utf-8", self.path.split("?")[0]
+            if path == "/history.json":
                 body, ctype = json.dumps(history_data(), ensure_ascii=False).encode("utf-8"), "application/json"
-            elif self.path.startswith("/history/classic"):
+            elif path == "/flow.json":
+                body, ctype = json.dumps(flow_data(), ensure_ascii=False).encode("utf-8"), "application/json"
+            elif path == "/chat":
+                body, ctype = json.dumps(chat_messages(), ensure_ascii=False).encode("utf-8"), "application/json"
+            elif path == "/history/classic":
                 body = history_page_classic().encode("utf-8")
-            elif self.path.startswith("/history"):
+            elif path == "/classic":
+                body = page().encode("utf-8")
+            elif path in ("/", "/history"):
                 body = HIST_HTML.read_bytes()
             else:
-                body = page().encode("utf-8")
+                return self.send_error(404)
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.end_headers()

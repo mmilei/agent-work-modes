@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Loop history</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<title>Loop board</title>
+<link rel="icon" href="data:,">
 <style>
 :root{
   --bg:#0a0f0c; --bg2:#0f1612; --card:#121a15; --card2:#16211a; --line:#1f2c24; --line2:#2a3a30;
@@ -108,7 +107,7 @@ h2 small{font:400 12.5px Inter,sans-serif;letter-spacing:0;text-transform:none;c
 .evl details summary{cursor:pointer;list-style:none}.evl details summary::-webkit-details-marker{display:none}
 .evl details p{color:var(--dim);font-size:12.5px;margin:4px 0 8px;white-space:pre-wrap}
 
-.two{display:grid;grid-template-columns:1.35fr 1fr;gap:12px}@media(max-width:1000px){.two{grid-template-columns:1fr}}
+.two{display:grid;grid-template-columns:1.35fr 1fr;gap:12px}@media(max-width:1000px){.two{grid-template-columns:minmax(0,1fr)}}
 .feed{max-height:620px;overflow-y:auto;padding-right:6px}
 .fi{display:grid;grid-template-columns:54px 1fr;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line)}
 .fi .min{font:800 22px/1 var(--display);text-align:right}.fi .min small{display:block;font:500 10.5px var(--mono);color:var(--faint)}
@@ -130,14 +129,81 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .shots a{display:block;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--bg2);color:var(--dim);font-size:11px}
 .shots img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}.shots span{display:block;padding:5px 8px}
 footer{color:var(--faint);font-size:12px;margin-top:40px}
+
+/* live flow */
+.bars{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px 24px}
+.pb .l{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+.pb .l b{font:600 12px var(--mono);color:var(--chalk);text-transform:none;letter-spacing:0}
+.pb .track{height:10px;background:var(--line);border-radius:5px;overflow:hidden;display:flex;margin-top:7px}
+.pb .track i{display:block;height:100%}
+.pb .tries{display:flex;gap:2px;align-items:flex-end;height:30px;margin-top:7px}.pb .tries i{flex:1;min-width:2px;border-radius:2px 2px 0 0}
+.lfg{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px;align-items:start}@media(max-width:1100px){.lfg{grid-template-columns:minmax(0,1fr)}}
+.pane .bd,.pane code.v{overflow-wrap:anywhere}
+#lf{gap:44px}#lf .col{width:210px;justify-content:flex-start}
+.badge{font:600 9.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--k);color:var(--k);border-radius:20px;padding:0 6px;white-space:nowrap}
+.node .w{font:500 10.5px var(--mono);color:var(--k);margin-top:2px}
+.node.pulse{animation:glow 1.6s ease-in-out infinite}@keyframes glow{50%{box-shadow:0 0 0 3px #ffc14540}}
+.node.sub{margin-left:14px;padding:6px 10px}.node.sub .nn{font-size:12px;margin:3px 0 0}
+.edge.live{stroke:var(--unblocked);stroke-dasharray:5 4;animation:dash 1s linear infinite}@keyframes dash{to{stroke-dashoffset:-9}}
+.edge.feed{stroke:var(--blocked);stroke-dasharray:4 3;stroke-width:1.8}
+.pane code.v{display:block;white-space:pre-wrap;padding:6px 8px;font-size:11.5px}
+.slog{max-height:440px;overflow-y:auto;font-size:12.5px}
+.lr{display:grid;grid-template-columns:86px 58px minmax(0,1fr);gap:8px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.lr time{font:500 11px var(--mono);color:var(--faint);padding-top:1px}.lr .k{font:600 10.5px var(--mono);text-transform:uppercase;padding-top:1px}
+.lr .k.round{color:var(--done)}.lr .k.commit{color:var(--tag)}.lr .k.usage{color:var(--unblocked)}.lr span:last-child{overflow-wrap:anywhere}
+.msgs{max-height:360px;min-height:80px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.msg{border:1px solid var(--line2);background:var(--bg2);border-radius:10px;padding:7px 10px;max-width:92%}
+.msg.user{align-self:flex-end}.msg.orchestrator{border-color:#9be15d66}
+.msg .mh{font:500 10.5px var(--mono);color:var(--faint)}.msg.orchestrator .mh{color:var(--accent)}
+.msg .mt{white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0 4px}
+.refs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;min-height:20px}
+.refs button{all:unset;cursor:pointer;margin-left:4px;color:var(--chalk)}
+#ct{width:100%;min-height:70px;resize:vertical;background:var(--bg2);color:var(--chalk);border:1px solid var(--line2);border-radius:8px;
+  font:inherit;padding:8px 10px}#ct:focus{outline:none;border-color:var(--accent)}
+.cr{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px}
+.cr button{background:var(--accent);color:#0a0f0c;border:0;border-radius:8px;padding:6px 16px;font:600 13px Inter,system-ui,sans-serif;cursor:pointer}
+@media(max-width:600px){main{padding:14px 12px 60px}.brand{font-size:40px}.kpi b{font-size:32px}
+  .lr{grid-template-columns:70px minmax(0,1fr)}.lr .k{display:none}.msg{max-width:100%}}
 </style>
 </head>
 <body>
 <main>
   <header>
-    <div class="brand"><small id="proj">PROJECT HISTORY</small>Minute by minute</div>
-    <div class="meta"><span class="live" id="now">—</span><br><a href="/">current loop</a> · <a href="/history/classic">classic view</a></div>
+    <div class="brand"><small id="proj">LOOP BOARD</small>Live loop</div>
+    <div class="meta"><span class="live" id="now">—</span><br><a href="#hist">project history</a> · <a href="/classic">classic view</a></div>
   </header>
+
+  <section>
+    <h2>Progress <small id="lname"></small></h2>
+    <div class="panel bars" id="bars"></div>
+  </section>
+
+  <section>
+    <h2>Flow <small>one node per item, laid out by Depends · click a node for its VERIFY and evidence</small></h2>
+    <div class="lfg">
+      <div class="panel flowwrap" id="lfw"></div>
+      <aside class="pane" id="lpane"><p class="note">click a node</p></aside>
+    </div>
+    <div class="legend" id="llegend"></div>
+  </section>
+
+  <section class="two">
+    <div>
+      <h2>Session log <small>rounds, commits and usage lines</small></h2>
+      <div class="panel slog" id="slog"></div>
+    </div>
+    <div id="chat">
+      <h2>Chat <small>to the orchestrator · click a node or select text to attach it</small></h2>
+      <div class="panel">
+        <div class="msgs" id="msgs"></div>
+        <div class="refs" id="refs"></div>
+        <form id="cf"><textarea id="ct" maxlength="8000" placeholder="Write to the orchestrator (Ctrl+Enter sends)"></textarea>
+          <div class="cr"><span class="note" id="cst"></span><button type="submit">Send</button></div></form>
+      </div>
+    </div>
+  </section>
+
+  <h2 id="hist" style="margin-top:44px">Project history</h2>
 
   <div class="board" id="board"></div>
 
@@ -176,13 +242,14 @@ footer{color:var(--faint);font-size:12px;margin-top:40px}
     <h2>Screenshots <small>the 12 most recent</small></h2>
     <div class="shots" id="shots"></div>
   </section>
-  <footer>Refreshes itself every minute, no reload needed. Data: each loop's LOOP-STATE / LOOP-HISTORY, result*.json and the repo's git.</footer>
+  <footer>Refreshes itself, no reload needed: chat every 3 s, flow every 15 s, history every minute. Data: each loop's LOOP-STATE / LOOP-HISTORY / LOOP-USAGE, result*.json, orchestrator-inbox/outbox.jsonl and the repo's git.</footer>
 </main>
 <div id="tip"></div>
 
 <script>
 const $ = s => document.querySelector(s);
-const C = {done:'#5ee08a', blocked:'#ff6b6b', unblocked:'#ffc145', todo:'#5b6b61', now:'#ffc145', tag:'#7cc4ff'};
+const C = {done:'#5ee08a', blocked:'#ff6b6b', unblocked:'#ffc145', todo:'#8a9b90', now:'#ffc145', tag:'#7cc4ff',
+  waiting:'#56665c', gate:'#c792ea', sub:'#c792ea'};
 const KIND = {done:'done', blocked:'blocked', unblocked:'unblocked'};
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const T = s => new Date(s).getTime();
@@ -196,11 +263,11 @@ async function load() {
   EV = D.loops.flatMap((l, li) => l.ev.map(e => ({...e, li, loop: l.name,
     title: /^done\b/i.test(e.title) && e.body ? e.body.split(/(?<=[.:])\s|\n/)[0].slice(0, 140) : e.title})));
   D.loops.forEach((l, li) => l.ev = EV.filter(e => e.li === li));
-  $('#proj').textContent = D.title.toUpperCase() + ' · PROJECT HISTORY'; document.title = D.title + ' · history';
+  $('#proj').textContent = D.title.toUpperCase() + ' · LOOP BOARD'; document.title = D.title + ' · loop board';
   board(); timeline(); cards(); feed(); spend(); tags(); shots();
   if (sel === null && location.hash) { const h = decodeURIComponent(location.hash.slice(1)); const li = D.loops.findIndex(l => l.name === h); if (li >= 0) sel = li; }
   if (sel !== null) detail(sel, false);
-  $('#now').textContent = 'actualizado ' + D.now;
+  $('#now').textContent = 'updated ' + D.now;
 }
 
 function board() {
@@ -329,13 +396,7 @@ function detail(li, scroll) {
   sel = li; const l = D.loops[li];
   const its = l.items, by = Object.fromEntries(its.map(i => [i.id, i]));
   const evOf = id => l.ev.filter(e => e.id === id);
-  // depth = longest dependency chain; columns ordered by the average row of their parents to cut crossings
-  const depth = {}, d = id => depth[id] ??= 1 + Math.max(-1, ...by[id].deps.filter(x => by[x]).map(d));
-  its.forEach(i => d(i.id));
-  const cols = [], row = {};
-  its.forEach(i => (cols[depth[i.id]] ??= []).push(i));
-  cols.forEach(c => { c.sort((a, b) => avg(a) - avg(b)); c.forEach((i, r) => row[i.id] = r); });
-  function avg(i) { const p = i.deps.filter(x => row[x] !== undefined); return p.length ? p.reduce((s, x) => s + row[x], 0) / p.length : its.indexOf(i) * .01; }
+  const cols = layers(its, by);
   const node = i => {
     const ev = evOf(i.id), all = ev.map(e => e.title + ' ' + e.body).join(' ');
     const ok = (all.match(OKS) || []).length, bad = (all.match(BADS) || []).length, hashes = [...new Set(all.match(HASH) || [])];
@@ -366,15 +427,36 @@ function detail(li, scroll) {
   if (scroll) box.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
-function edges(by) {
-  const flow = $('#flow'), svg = $('#edges'); if (!flow) return;
+// depth = longest dependency chain; columns ordered by the average row of their parents to cut crossings
+function layers(its, by) {
+  const depth = {}, d = id => depth[id] ??= 1 + Math.max(-1, ...by[id].deps.filter(x => by[x]).map(d));
+  its.forEach(i => d(i.id));
+  const cols = [], row = {};
+  its.forEach(i => (cols[depth[i.id]] ??= []).push(i));
+  const avg = i => { const p = i.deps.filter(x => row[x] !== undefined); return p.length ? p.reduce((s, x) => s + row[x], 0) / p.length : its.indexOf(i) * .01; };
+  cols.forEach(c => { c.sort((a, b) => avg(a) - avg(b)); c.forEach((i, r) => row[i.id] = r); });
+  return cols;
+}
+
+// extra = [[from, to, class]] for edges that are not Depends (driver -> round -> item, round -> subagents)
+function edges(by, flow = $('#flow'), extra = []) {
+  if (!flow) return; const svg = flow.querySelector('svg.edges');
   const R = flow.getBoundingClientRect(), pos = {};
-  flow.querySelectorAll('.node').forEach(n => { const r = n.getBoundingClientRect(); pos[n.dataset.id] = {l: r.left - R.left, r: r.right - R.left, y: r.top - R.top + r.height / 2}; });
+  flow.querySelectorAll('.node').forEach(n => { const r = n.getBoundingClientRect();
+    pos[n.dataset.id] = {l: r.left - R.left, r: r.right - R.left, t: r.top - R.top, b: r.bottom - R.top, y: r.top - R.top + r.height / 2}; });
   svg.setAttribute('width', R.width); svg.setAttribute('height', R.height);
-  svg.innerHTML = Object.values(by).flatMap(i => i.deps.filter(x => pos[x]).map(x => {
-    const a = pos[x], b = pos[i.id], mx = (a.r + b.l) / 2;
-    return `<path class="edge ${by[x].kind === 'done' ? 'done' : ''}" data-a="${esc(x)}" data-b="${esc(i.id)}" d="M${a.r},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.l},${b.y}"/>`;
-  })).join('');
+  const pairs = Object.values(by).flatMap(i => i.deps.filter(x => pos[x]).map(x => [x, i.id, by[x].kind === 'done' ? 'done' : '']));
+  extra.forEach(p => pos[p[0]] && pos[p[1]] && pairs.push(p));
+  const mk = `ah-${flow.id}`;
+  svg.innerHTML = `<defs><marker id="${mk}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0L10,5L0,10z" fill="${C.blocked}"/></marker></defs>` +
+    pairs.map(([x, y, c]) => {
+      const a = pos[x], b = pos[y], mx = (a.r + b.l) / 2, ax = a.l + 22, bx = b.l + 22, my = (a.b + b.t) / 2;
+      const d = b.l >= a.r ? `M${a.r},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.l},${b.y}` : `M${ax},${a.b} C${ax},${my} ${bx},${my} ${bx},${b.t}`;  // same column: vertical
+      return `<path class="edge ${c}" data-a="${esc(x)}" data-b="${esc(y)}" d="${d}"/>`;
+    }).join('') +
+    // feedback arrow: an item that failed VERIFY went back for another try
+    [...flow.querySelectorAll('.node[data-retry]')].filter(n => +n.dataset.retry > 0).map(n => { const p = pos[n.dataset.id];
+      return `<path class="edge feed" marker-end="url(#${mk})" d="M${p.r},${p.y + 9} C${p.r + 30},${p.y + 34} ${p.r + 30},${p.y - 34} ${p.r + 1},${p.y - 9}"><title>retried ${n.dataset.retry}x</title></path>`; }).join('');
 }
 
 function chain(by, id) {
@@ -384,8 +466,8 @@ function chain(by, id) {
   goUp(id); goDown(id);
   return new Set([id, ...up, ...down]);
 }
-function highlight(by, id) {
-  const flow = $('#flow'); if (!flow) return;
+function highlight(by, id, flow = $('#flow')) {
+  if (!flow) return;
   flow.classList.toggle('hl', !!id);
   const set = id ? chain(by, id) : new Set();
   flow.querySelectorAll('.node').forEach(n => n.classList.toggle('chain', set.has(n.dataset.id)));
@@ -436,6 +518,127 @@ function shots() {
   $('#shots').innerHTML = D.shots.map(p => `<a href="${esc(p.src)}" target="_blank"><img loading="lazy" src="${esc(p.src)}"><span>${esc(p.name)} · ${dm(p.t)} ${hm(p.t)}</span></a>`).join('');
 }
 
+// ---- live flow of the current loop (/flow.json) ----
+let F = null, FB = {}, fSel = null;
+const LK = {done:'done', now:'running now', todo:'todo', waiting:'waiting', gate:'waits for the user', blocked:'BLOCKED'};
+const short = (s, n = 74) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+
+async function loadFlow() {
+  try { F = await (await fetch('/flow.json', {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
+  FB = Object.fromEntries(F.items.map(i => [i.id, i]));
+  $('#lname').textContent = `${F.loop} · ${F.now}`;
+  bars(); flowView(); slog();
+}
+
+function bars() {
+  const its = F.items, n = its.length || 1, cnt = k => its.filter(i => i.kind === k).length, R = F.round, sp = F.spend;
+  const pb = (l, v, body) => `<div class="pb"><div class="l">${l}<b>${v}</b></div>${body}</div>`;
+  const items = Object.keys(LK).map(k => `<i title="${LK[k]}: ${cnt(k)}" style="width:${cnt(k) / n * 100}%;background:${kc(k)}"></i>`).join('');
+  const mx = Math.max(2, ...its.map(i => +i.tries));
+  const tries = its.map(i => `<i title="#${esc(i.id)} · ${i.tries} tries" style="height:${Math.max(+i.tries / mx * 100, 6)}%;background:${+i.retries ? C.blocked : +i.tries ? C.done : 'var(--line2)'}"></i>`).join('');
+  const tok = F.usage.map(u => [u, [...u.text.matchAll(/(\d[\d,]*) ?tok/g)].reduce((a, m) => a + +m[1].replace(/,/g, ''), 0)]).filter(x => x[1]);
+  const shade = i => `hsl(${100 + i * 23 % 70},55%,${42 + i % 3 * 8}%)`;
+  $('#bars').innerHTML =
+    pb('Items done', `${cnt('done')} / ${its.length}`, `<div class="track">${items}</div>`) +
+    pb('Rounds used', `${R.n} / ${R.cap || '?'}`, `<div class="track"><i style="width:${R.cap ? Math.min(R.n / R.cap, 1) * 100 : 0}%;background:${R.cap && R.n >= R.cap ? C.blocked : C.tag}"></i></div>`) +
+    pb('Tries per item', `${its.reduce((a, i) => a + +i.tries, 0)} total · ${its.filter(i => +i.retries).length} retried`, `<div class="tries">${tries}</div>`) +
+    pb('Tokens (usage lines)', F.tokens ? num(F.tokens) : 'none logged', `<div class="track">${tok.map(([u, t], i) => `<i title="${esc(u.t)} · ${num(t)} tokens · ${esc(u.text)}" style="width:${t / F.tokens * 100}%;background:${shade(i)}"></i>`).join('')}</div>`) +
+    pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'none logged',`<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`);
+}
+
+function flowView() {
+  const its = F.items, R = F.round, cols = layers(its, FB);
+  const wait = i => i.kind === 'waiting' ? 'waits on ' + i.waits.map(x => '#' + x).join(' ') : i.kind === 'gate' ? 'waits for the user'
+    : i.kind === 'blocked' ? i.state.replace(/^BLOCKED:?\s*/, '') : i.kind === 'now' ? (R.live ? 'in the live round' : 'next up') : '';
+  const node = i => `<div class="node ${i.kind === 'now' ? 'pulse' : ''}" data-id="${esc(i.id)}" data-retry="${+i.retries}" style="--k:${kc(i.kind)}" title="${esc(i.state)}">
+    <div class="nh"><span class="id">#${esc(i.id)}</span><span class="badge">${LK[i.kind]}</span><span class="tr">${+i.tries ? i.tries + (+i.tries > 1 ? ' tries' : ' try') : ''}</span></div>
+    <div class="nn">${esc(short(i.what))}</div>${wait(i) ? `<div class="w">${esc(short(wait(i), 60))}</div>` : ''}
+    ${+i.retries ? `<div class="w" style="color:${C.blocked}">↺ failed VERIFY ${i.retries}x, retried</div>` : ''}</div>`;
+  const on = v => v === null ? 'unknown' : v ? 'running' : 'stopped';
+  const sys = `<div class="col"><div class="col-h">driver and round</div>
+    <div class="node" data-id="_driver" style="--k:${C.tag}"><div class="nh"><span class="id">driver</span><span class="badge">${on(R.driver)}</span></div>
+      <div class="nn">fresh-loop.py · round ${R.n} of ${R.cap || '?'}</div></div>
+    <div class="node ${R.live ? 'pulse' : ''}" data-id="_round" style="--k:${R.live ? C.now : C.todo}"><div class="nh"><span class="id">claude -p</span><span class="badge">${R.live ? 'live' : on(R.live)}</span></div>
+      <div class="nn">${R.item ? 'round on #' + esc(R.item) : 'no runnable item'}</div>
+      <div class="w">${R.session ? `session ${esc(R.session)} · ${R.tools} tool calls · ${esc(R.last)}` : 'no transcript (--transcripts)'}</div></div>
+    ${R.agents.slice(-6).map((a, j) => `<div class="node sub" data-id="_sa${j}" style="--k:${C.sub}"><div class="nh"><span class="badge">subagent</span><span>${esc(a.type)}</span></div><div class="nn">${esc(short(a.desc, 50))}</div></div>`).join('')}</div>`;
+  const keep = $('#lfw').scrollLeft;
+  $('#lfw').innerHTML = `<div class="flow" id="lf"><svg class="edges"></svg>${sys}
+    ${cols.map((c, ci) => `<div class="col"><div class="col-h">${ci === 0 ? 'no dependencies' : 'level ' + ci}</div>${c.map(node).join('')}</div>`).join('')}</div>`;
+  $('#lfw').scrollLeft = keep;
+  const extra = [['_driver', '_round', 'live'], ['_round', R.item, R.live ? 'live' : ''], ...R.agents.slice(-6).map((_, j) => ['_round', '_sa' + j, 'live'])];
+  $('#lf').querySelectorAll('.node').forEach(n => {
+    n.onclick = () => { const i = FB[n.dataset.id]; if (i) { fpane(i.id); setRef('node', {type: 'node', id: i.id, state: i.state, label: '#' + i.id}); }
+      else setRef('node', {type: 'node', id: n.dataset.id, label: n.querySelector('.id, .badge').textContent}); };
+    if (FB[n.dataset.id]) { n.onmouseenter = () => highlight(FB, n.dataset.id, $('#lf')); n.onmouseleave = () => highlight(FB, null, $('#lf')); }
+  });
+  requestAnimationFrame(() => edges(FB, $('#lf'), extra));
+  $('#llegend').innerHTML = Object.keys(LK).map(k => `<span><i style="background:${kc(k)}"></i>${LK[k]}</span>`).join('') +
+    `<span><i style="background:${C.blocked};border-radius:1px;height:3px"></i>retry (failed VERIFY)</span><span><i style="background:${C.now};border-radius:1px;height:3px"></i>live round</span>`;
+  fpane(FB[fSel] ? fSel : F.current || its[0]?.id);
+}
+
+function fpane(id) {
+  const i = FB[id], P = $('#lpane'); if (!i) return; fSel = id;
+  $('#lf').querySelectorAll('.node').forEach(n => n.classList.toggle('on', n.dataset.id === id));
+  const users = F.items.filter(x => x.deps.includes(id));
+  const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc(short(FB[x]?.what || '', 30))}</button>`;
+  P.style.setProperty('--k', kc(i.kind));
+  P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+    <h3>What it does</h3><div class="bd">${rich(i.what)}</div>
+    ${i.deps.length ? `<h3>Depends on</h3><div class="deps">${i.deps.map(btn).join('')}</div>` : ''}
+    ${i.waits.length && i.kind !== 'done' ? `<h3>Waits on</h3><div class="deps">${i.waits.map(btn).join('')}</div>` : ''}
+    ${users.length ? `<h3>Unblocks</h3><div class="deps">${users.map(u => btn(u.id)).join('')}</div>` : ''}
+    <h3>VERIFY</h3>${i.verify ? `<div class="bd"><code class="v">${esc(i.verify)}</code></div>` : '<p class="note">no VERIFY in the item text</p>'}
+    <h3>Evidence</h3>${i.ev.length ? i.ev.map(e => `<div class="pev" style="--k:${C[e.kind]}"><time>${dm(e.t)} ${hm(e.t)}</time><span class="kt">${KIND[e.kind]}</span>
+      <div class="tt">${esc(e.title)}</div>${evBody(e.body)}</div>`).join('') : '<p class="note">no LOOP-HISTORY entries for this item</p>'}`;
+  P.querySelectorAll('[data-go]').forEach(b => b.onclick = () => fpane(b.dataset.go));
+}
+
+function slog() {
+  $('#slog').innerHTML = F.log.map(e => `<div class="lr"><time>${dm(e.t)} ${hm(e.t)}</time><span class="k ${e.kind}">${e.kind}</span><span>${rich(e.text)}</span></div>`).join('')
+    || '<p class="note">nothing yet</p>';
+}
+
+// ---- chat: references picked in the page travel with each message ----
+const REFS = {};  // one per kind: node, text, section
+function setRef(kind, ref) { REFS[kind] = ref; refsView(); }
+function refsView() {
+  $('#refs').innerHTML = Object.entries(REFS).map(([k, r]) => `<span class="chip g">${esc(k)}: ${esc(r.label)}<button data-x="${k}" aria-label="remove ${esc(k)} reference">×</button></span>`).join('');
+  $('#refs').querySelectorAll('[data-x]').forEach(b => b.onclick = () => { delete REFS[b.dataset.x]; refsView(); });
+}
+const refLabel = r => r.type === 'node' ? '#' + r.id : r.type === 'text' ? '"' + short(String(r.text), 40) + '"' : r.type === 'section' ? 'section: ' + r.name : short(JSON.stringify(r), 40);
+document.addEventListener('mouseup', e => {
+  if (e.target.closest('#chat')) return;
+  const s = String(getSelection()).trim();
+  if (s) setRef('text', {type: 'text', text: s.slice(0, 1000), label: '"' + short(s, 40) + '"'});
+});
+document.addEventListener('click', e => {
+  const sec = e.target.closest('section, #hist'); if (!sec || e.target.closest('#chat')) return;
+  const name = (sec.querySelector('h2')?.firstChild || sec).textContent.trim();
+  if (name) setRef('section', {type: 'section', name, label: name});
+});
+let chatN = -1;
+async function loadChat() {
+  let M; try { M = await (await fetch('/chat', {cache:'no-store'})).json(); } catch (e) { return; }
+  if (M.length === chatN) return; chatN = M.length;
+  const box = $('#msgs');
+  box.innerHTML = M.map(m => `<div class="msg ${m.from === 'user' ? 'user' : 'orchestrator'}"><div class="mh">${m.from === 'user' ? 'you' : 'orchestrator'} · ${esc(m.ts.replace('T', ' ').slice(0, 19))}</div>
+    <div class="mt">${esc(m.text)}</div>${m.refs.length ? `<div class="chips">${m.refs.map(r => `<span class="chip">${esc(refLabel(r))}</span>`).join('')}</div>` : ''}</div>`).join('')
+    || '<p class="note">No messages yet. Replies from the orchestrator show up here.</p>';
+  box.scrollTop = box.scrollHeight;
+}
+$('#cf').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('#ct').value.trim(); if (!text) return;
+  const refs = Object.values(REFS).map(({label, ...r}) => r);
+  let r; try { r = await fetch('/chat', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text, refs})}); } catch (err) { r = {ok: false, status: 'offline'}; }
+  if (!r.ok) { $('#cst').textContent = 'not sent: ' + r.status; return; }
+  $('#ct').value = ''; Object.keys(REFS).forEach(k => delete REFS[k]); refsView();
+  $('#cst').textContent = 'sent, written to the inbox'; loadChat();
+};
+$('#ct').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('#cf').requestSubmit(); };
+
 const tip = $('#tip');
 document.addEventListener('mousemove', ev => {
   const d = ev.target.closest('.dot');
@@ -447,7 +650,9 @@ document.addEventListener('mousemove', ev => {
   tip.style.left = x + 'px'; tip.style.top = y + 'px';
 });
 document.addEventListener('click', ev => { const d = ev.target.closest('.dot'); if (d) detail(EV[+d.dataset.e].li, true); });
-let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!D) return; timeline(); if (sel !== null) edges(Object.fromEntries(D.loops[sel].items.map(i => [i.id, i]))); }, 150); });
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (F) flowView(); if (!D) return; timeline(); if (sel !== null) edges(Object.fromEntries(D.loops[sel].items.map(i => [i.id, i]))); }, 150); });
+loadFlow(); setInterval(loadFlow, 15000);
+loadChat(); setInterval(loadChat, 3000);
 load(); setInterval(load, 60000);
 </script>
 </body>

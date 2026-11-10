@@ -1,6 +1,6 @@
 """One run per form of the bench protocol, sonnet only: python bench/run.py <form> [<form>...]
 Creates ../awm-bench-<form>-1 outside the repo, runs the form, checks, appends bench/results.jsonl."""
-import json, shutil, subprocess, sys, time
+import json, os, shutil, subprocess, sys, time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -24,13 +24,13 @@ FRESH_PROMPT = P + "\n\nRead LOOP-STATE.md, do only the first todo item, run the
 
 
 def sh(cmd, cwd, **kw):
-    return subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True, **kw)
+    return subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, **({"text": True} if "encoding" not in kw else {}), **kw)
 
 
 def run(form):
     d = REPO.parent / f"awm-bench-{form}-1"
     if d.exists():
-        shutil.rmtree(d)
+        shutil.rmtree(d, onerror=lambda f, p, e: (os.chmod(p, 0o700), f(p)))
     shutil.copytree(REPO / "bench/task", d)
     sh("git init -q && git add -A && git -c user.name=b -c user.email=b@b commit -qm init", d)
     if form in ("loop", "fresh"):
@@ -44,9 +44,9 @@ def run(form):
         (d / "PROMPT.md").write_text(FRESH_PROMPT)
         cmd = f'python "{S / "fresh-loop.py"}" --prompt PROMPT.md --check "{CHECK}" --rounds 6 --lean -- --model sonnet --permission-mode auto'
     else:
-        prompt = (LOOP_PROMPT if form == "loop" else P + EXTRA[form]).replace('"', '\\"')
-        cmd = f'claude -p "{prompt}" --model sonnet --permission-mode auto'
-    out = sh(cmd, d)
+        prompt = LOOP_PROMPT if form == "loop" else P + EXTRA[form]
+        cmd = "claude -p --model sonnet --permission-mode auto"  # prompt via stdin, no shell quoting
+    out = sh(cmd, d, input=prompt, encoding="utf-8")
     mins = round((time.time() - t0) / 60, 1)
     ok = sh(CHECK, d).returncode == 0 and sh("git diff --quiet test_roman.py", d).returncode == 0
     rec = dict(form=form, n=1, model="sonnet", minutes=mins, finished=ok, folder=d.name, tail=(out.stdout + out.stderr)[-400:])

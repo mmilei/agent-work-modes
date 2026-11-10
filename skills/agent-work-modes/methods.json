@@ -195,6 +195,9 @@
     {"label": "Claude Platform docs - Optimizing for cost and intelligence", "url": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence"},
     {"label": "Anthropic - Effective harnesses for long-running agents", "url": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents"},
     {"label": "Anthropic - Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"},
-    {"label": "Claude Code docs - Hooks", "url": "https://code.claude.com/docs/en/hooks"}
+    {"label": "Claude Code docs - Hooks", "url": "https://code.claude.com/docs/en/hooks"},
+    {"label": "Claude Code docs - Subagents (choose a model)", "url": "https://code.claude.com/docs/en/sub-agents"},
+    {"label": "Claude blog - Which Claude model should you build with", "url": "https://claude.dev/blog/which-claude-model-should-you-build-with/"},
+    {"label": "Claude blog - Safely scaling multi-agent teams with Fable 5.2", "url": "https://claude.dev/blog/safely-scaling-multi-agent-teams-with-fable-5-2/"}
   ]
 }

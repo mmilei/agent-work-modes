@@ -116,7 +116,7 @@ Source: [Which Claude model should you build with?](https://claude.dev/blog/whic
 
 ## What does not pay off
 
-- **Agent teams:** experimental, spend considerably more tokens, and do not run under `claude -p`.
+- **Agent teams:** experimental, spend considerably more tokens, and do not run under `claude -p`. At scale they also need infrastructure a subscription session does not give you: [Safely scaling multi-agent teams](https://claude.dev/blog/safely-scaling-multi-agent-teams-with-fable-5-2/) reports a shared machine failing around 100 agents (one lightweight VM per agent instead), a shared database for coordination, and layered monitoring (a real-time classifier that blocks tool calls plus an offline review). The article does not discuss subscription limits; that part is an inference from its token and compute figures.
 - **A maximum-effort mode left on all the time:** it turns every request into a workflow and burns the quota.
 
 ## Not proven yet

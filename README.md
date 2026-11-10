@@ -66,6 +66,16 @@ docs/index.html         the rendered page
 
 After editing the catalog: `python skills/agent-work-modes/scripts/render.py`.
 
+## Evals
+
+`evals/scenarios.json` holds selector scenarios (which forms must be among the candidates, which must not be
+recommended); `evals/triggers.json` holds phrases that must and must not fire the skill. Each case is one
+`claude -p` call with the plugin loaded, so a run spends plan quota. The table below is written by
+`python evals/run.py --triggers`; failures stay listed.
+
+<!-- evals:start -->
+<!-- evals:end -->
+
 ## Lessons behind it
 
 The trade-offs on the page come from using these forms on real projects. Some of what went wrong:

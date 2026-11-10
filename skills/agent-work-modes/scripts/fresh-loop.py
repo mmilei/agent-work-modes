@@ -9,6 +9,10 @@ Extra arguments after `--` go to claude as is, e.g. `-- --permission-mode auto -
 Not acceptEdits: inside `claude -p` it denies every Bash call, so the rounds cannot run their VERIFY.
 On Windows the check runs through cmd.exe.
 
+--cli swaps the agent: the command that runs one headless session, the prompt is appended as its last argument
+before the extra arguments (default `claude -p`; e.g. `codex exec`, `gemini -p`, `opencode run`). --lean and
+--measure only apply to `claude`.
+
 --lean trims what every round loads before reading the prompt (measured 51k -> 17k tokens on a real repo): only the
 tools a round needs (--tools, default Bash,Read,Edit,Write,Glob,Grep,Monitor; add Agent if rounds delegate), no
 skills, no MCP servers, and no CLAUDE.md from folders above the repo root (above the current folder outside a repo).
@@ -19,6 +23,7 @@ with the same flags (one real model call, hooks included) and prints that startu
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -31,10 +36,14 @@ ap.add_argument("--stall", type=int, default=3, help="rounds without repo change
 ap.add_argument("--lean", action="store_true", help="load only what a round needs (see above)")
 ap.add_argument("--tools", default="Bash,Read,Edit,Write,Glob,Grep,Monitor", help="tool list for --lean")
 ap.add_argument("--measure", action="store_true", help="print the startup context of one round and exit")
+ap.add_argument("--cli", default="claude -p", help="headless agent command; the prompt goes right after it")
 args, extra = ap.parse_known_args()
 extra = [a for a in extra if a != "--"]
 if args.rounds < 1:
     ap.error("--rounds must be positive")
+cli = shlex.split(args.cli)
+if (args.lean or args.measure) and cli[0] != "claude":
+    ap.error("--lean and --measure only work with the claude CLI")
 
 
 def lean_flags():
@@ -100,7 +109,7 @@ for n in range(1, args.rounds + 1):
         sys.exit(print("fresh-loop: STOP file found") or 0)
     check_blocked()
     print(f"fresh-loop: round {n}/{args.rounds}", flush=True)
-    result = subprocess.run(["claude", "-p", prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
+    result = subprocess.run([*cli, prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
     if result.returncode:
         sys.exit(f"fresh-loop: session failed with exit code {result.returncode}; inspect its evidence before continuing")
     check_blocked()

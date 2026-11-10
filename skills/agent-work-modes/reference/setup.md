@@ -161,6 +161,9 @@ session, so prefer the fresh-session loop for long runs.
    Otherwise use the positive remainder (not the original cap):
    `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <remaining-round-cap> --lean -- --permission-mode auto`.
    `touch STOP` ends it cleanly between rounds.
+   With another agent from `orchestration` (SKILL.md 1b), pass its headless command and its own flags, without
+   `--lean` or `--measure`: `--cli "codex exec" -- -m <id>`, `--cli "gemini -p" -- -m <id>`. Check the flags with the
+   CLI's `--help` first, and in particular how it allows edits and shell commands without asking.
 5. To see what the run cost, round by round and with any subagents:
    `python scripts/session-cost.py --project <part of the repo folder name>`. On a subscription the amounts are
    ccusage's API-price estimate, not actual charges or a quota percentage. Prompt-based loop grouping is heuristic;

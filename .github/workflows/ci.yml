@@ -1,0 +1,21 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests
+        run: |
+          for t in skills/agent-work-modes/scripts/test_*.py; do python "$t"; done
+      - name: Page is up to date
+        run: |
+          python skills/agent-work-modes/scripts/render.py
+          git diff --exit-code docs/index.html

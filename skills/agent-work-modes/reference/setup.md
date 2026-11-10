@@ -256,6 +256,13 @@ every morning, read a goal file in the repo and open a PR.
 Ask the user for the goal of the next session. Write `HANDOFF.md` in the repo with that goal, what was decided, what
 is open and the relevant files, only what serves that goal. Show it before `/clear`. It is not a session summary.
 
+## Second brain (optional, ask once)
+
+At the first loop or handoff in a project, if the user keeps a notes vault, ask one time: write the closing pointers
+there (a spec note before the run, a one-line pointer in its log and hot cache at the end, a push notification, dev
+servers shut down) or leave it off. Save the answer where the user keeps memory and do not ask again. Off means the
+loop leaves everything in the repo (`LOOP-HISTORY.md`, `HANDOFF.md`); the vault never gets copies of loop numbers.
+
 ## Learning inbox
 
 Create `INBOX.md` in the repo (or the user's notes folder). The pass: read the last sessions' transcripts or logs,

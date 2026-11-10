@@ -129,6 +129,10 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
 .shots a{display:block;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--bg2);color:var(--dim);font-size:11px}
 .shots img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}.shots span{display:block;padding:5px 8px}
+#cur-items table,#cur-round table,#cur-proc table{border-collapse:collapse;width:100%;font-size:12.5px}
+#now-sec td,#now-sec th{padding:3px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+#now-sec .cmd{font-family:var(--mono);color:var(--dim);word-break:break-all}.chip{display:inline-block;margin:2px;padding:1px 9px;border-radius:20px;border:1px solid var(--line)}
+#now-sec pre{white-space:pre-wrap;font-size:12.5px;margin:0}#now-sec .dim{color:var(--dim)}
 footer{color:var(--faint);font-size:12px;margin-top:40px}
 </style>
 </head>
@@ -136,10 +140,23 @@ footer{color:var(--faint);font-size:12px;margin-top:40px}
 <main>
   <header>
     <div class="brand"><small id="proj">PROJECT HISTORY</small>Minute by minute</div>
-    <div class="meta"><span class="live" id="now">—</span><br><a href="/">current loop</a> · <a href="/history/classic">classic view</a></div>
+    <div class="meta"><span class="live" id="now">—</span><br><a href="#now-sec">current loop</a> · <a href="#hist-sec">history</a></div>
   </header>
 
-  <div class="board" id="board"></div>
+  <section id="now-sec">
+    <h2>Current loop <small id="cur-name"></small></h2>
+    <div class="panel" id="cur-items"></div>
+    <div class="two">
+      <div class="panel" id="cur-round"></div>
+      <div class="panel" id="cur-proc"></div>
+    </div>
+    <div class="two">
+      <div class="panel" id="cur-results"></div>
+      <div class="panel" id="cur-commits"></div>
+    </div>
+  </section>
+
+  <a id="hist-sec"></a><div class="board" id="board"></div>
 
   <section>
     <h2>Timeline <small>each lane is a loop · long pauses are compressed · hover a dot</small></h2>
@@ -176,7 +193,7 @@ footer{color:var(--faint);font-size:12px;margin-top:40px}
     <h2>Screenshots <small>the 12 most recent</small></h2>
     <div class="shots" id="shots"></div>
   </section>
-  <footer>Refreshes itself every minute, no reload needed. Data: each loop's LOOP-STATE / LOOP-HISTORY, result*.json and the repo's git.</footer>
+  <footer>Refreshes itself every 15 s, no reload needed. Data: each loop's LOOP-STATE / LOOP-HISTORY, result*.json and the repo's git.</footer>
 </main>
 <div id="tip"></div>
 
@@ -191,7 +208,7 @@ const num = (x, d=0) => x.toLocaleString('en-US', {minimumFractionDigits:d, maxi
 let D = null, sel = null, EV = [];
 
 async function load() {
-  try { D = await (await fetch('/history.json', {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
+  try { D = await (await fetch('/history.json', {cache:'no-store'})).json(); current(await (await fetch('/current.json', {cache:'no-store'})).json()); } catch (e) { $('#now').textContent = 'offline'; return; }
   // a bare "done" header says nothing: use the first sentence of the evidence as the headline
   EV = D.loops.flatMap((l, li) => l.ev.map(e => ({...e, li, loop: l.name,
     title: /^done\b/i.test(e.title) && e.body ? e.body.split(/(?<=[.:])\s|\n/)[0].slice(0, 140) : e.title})));
@@ -201,6 +218,17 @@ async function load() {
   if (sel === null && location.hash) { const h = decodeURIComponent(location.hash.slice(1)); const li = D.loops.findIndex(l => l.name === h); if (li >= 0) sel = li; }
   if (sel !== null) detail(sel, false);
   $('#now').textContent = 'actualizado ' + D.now;
+}
+
+// server-escaped HTML snippets (round, processes, results) come from loop-status.py; the rest is escaped here
+function current(c) {
+  $('#cur-name').textContent = c.loop + (c.round ? ' · ' + c.round : '');
+  const rows = c.items.map(i => `<tr><td>#${esc(i.id)}</td><td style="color:${C[i.kind]}">${esc(i.state)}</td><td>${esc(i.name.slice(0, 110))}</td><td>${i.tries}</td></tr>`).join('');
+  $('#cur-items').innerHTML = c.items.length ? `<table><tr><th>#</th><th>state</th><th>item</th><th>tries</th></tr>${rows}</table>` : '<p class="dim">no items in LOOP-STATE.md</p>';
+  $('#cur-round').innerHTML = `<h3>Current round</h3>${c.session}<h3>Last thing the round said</h3><pre>${esc(c.last_text)}</pre>`;
+  $('#cur-proc').innerHTML = `<h3>Live processes</h3>${c.processes}`;
+  $('#cur-results').innerHTML = `<h3>Results per round</h3>${c.results}`;
+  $('#cur-commits').innerHTML = `<h3>Loop folder commits</h3><pre>${esc(c.loop_commits)}</pre>`;
 }
 
 function board() {
@@ -448,7 +476,7 @@ document.addEventListener('mousemove', ev => {
 });
 document.addEventListener('click', ev => { const d = ev.target.closest('.dot'); if (d) detail(EV[+d.dataset.e].li, true); });
 let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (!D) return; timeline(); if (sel !== null) edges(Object.fromEntries(D.loops[sel].items.map(i => [i.id, i]))); }, 150); });
-load(); setInterval(load, 60000);
+load(); setInterval(load, 15000);
 </script>
 </body>
 </html>

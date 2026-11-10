@@ -190,8 +190,8 @@ times it rewrote its cache after a pause, next to its cost.
 ## Loop status board
 
 `scripts/loop-status.py` (with `loop-status.html` next to it) serves a live page for a loop from its own files:
-item graph, round lifecycle, the current round's tool calls, live processes, results, commits, screenshots, and a
-history view across loops. It reads files and rebuilds on every request, so it costs the watching session nothing.
+the current loop's item rows, the current round's tool calls, live processes, results and commits, then the history
+across loops with its graph, timeline and screenshots. It reads files and rebuilds on every request, so it costs the watching session nothing.
 Python standard library only.
 
 Launch it detached, so it outlives the session that started it (pick a free port):
@@ -226,8 +226,8 @@ Formats it reads:
   `BLOCKED` is a block; one with `unblocked` or `relaunched` is an unblock; anything else counts as done.
 - `result*.json` in the loop folder: the JSON of a `claude -p --output-format json` run, for the spend card.
 
-Routes: `/` current loop · `/history` history of all loops (data from `/history.json`) · `/history/classic`
-server-rendered history · `/shots/<file>` screenshots from `--screenshots`.
+Routes: `/` and `/history` the page (current loop on top, history of all loops below) · `/current.json` and
+`/history.json` its data · `/shots/<file>` screenshots from `--screenshots`.
 
 ## Cloud routine
 

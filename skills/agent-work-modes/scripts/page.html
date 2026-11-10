@@ -110,6 +110,7 @@ svg .curve{fill:none;stroke:var(--accent);stroke-width:2.6}
 svg .axl{font-size:11.5px;fill:var(--muted)}
 @media (max-width:900px){.layers,.pgrid{grid-template-columns:1fr}}
 @media (max-width:620px){.facts{grid-template-columns:1fr}}
+.meas{display:block;font-size:.72em;opacity:.75;margin-top:2px}
 </style>
 </head>
 <body>
@@ -250,6 +251,7 @@ function curve(kind){
 const $ = s => document.querySelector(s);
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 const meter = v => `<span class="meter" aria-label="${v} of 3">${[0,1,2].map(i => `<i class="${i < v ? "on" : ""}"></i>`).join("")}</span>`;
+const meas = (f, id) => !f.measured ? "" : id === "quota" ? `<small class="meas">${f.measured.mtok} M tok, US$${f.measured.usd} (run ${f.measured.session})</small>` : id === "reread" ? `<small class="meas">${f.measured.reread_mtok} M tok re-read</small>` : "";
 const F = DATA.forms, AX = DATA.axes, picked = f => PICK.includes(f.id);
 const pickable = F.filter(f => f.group === "pick");
 
@@ -313,7 +315,7 @@ $("#cmp").innerHTML = pickable.map(f => `<tr${picked(f) ? ' class="pick"' : ""}>
 const card = f => `<article class="fcard${picked(f) ? " pick" : ""}" id="${f.id}">
   <div class="fhead">
     <div><h3>${esc(f.name)}${f.group !== "pick" ? `<span class="modtag">${esc(DATA.groups[f.group].label.toLowerCase())}</span>` : ""}</h3><p class="one">${esc(f.one)}</p></div>
-    <div class="stats">${AX.map((a, i) => `<div class="stat">${esc(a.label)}${meter(f.scores[i])}</div>`).join("")}</div>
+    <div class="stats">${AX.map((a, i) => `<div class="stat">${esc(a.label)}${meter(f.scores[i])}${meas(f, a.id)}</div>`).join("")}</div>
   </div>
   <div class="diagram">${diagram({...f.diagram, aria:f.name}, f.id)}</div>
   <div class="facts">

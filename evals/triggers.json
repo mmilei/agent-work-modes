@@ -1,0 +1,27 @@
+{
+  "about": "Phrases that must and must not trigger the agent-work-modes skill.",
+  "trigger": [
+    "How should we work this?",
+    "Which work mode fits this migration?",
+    "Goal or workflow for this refactor?",
+    "Should this be a loop?",
+    "Subagents or not for these fixes?",
+    "Run this in the background while I am out.",
+    "Leave it running overnight.",
+    "This continues tomorrow, how do we set it up?",
+    "What is the best way to have the agent tackle these 40 tickets?",
+    "Should I use a Stop hook or /goal for this repo?"
+  ],
+  "no_trigger": [
+    "Fix the null pointer in OrderService.",
+    "What does this regex match?",
+    "Write a unit test for the date parser.",
+    "Rename getUser to fetchUser everywhere.",
+    "Explain how the Stop hook event works in Claude Code.",
+    "Commit these changes with a good message.",
+    "Summarize this pull request.",
+    "Why is the build failing?",
+    "Translate this README to Spanish.",
+    "Add a loop that retries the HTTP call three times."
+  ]
+}

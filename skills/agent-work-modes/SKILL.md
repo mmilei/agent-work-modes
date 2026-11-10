@@ -58,6 +58,9 @@ column: useful parallelism, isolation of context, or an independent check. Sever
 delegation. Keep direct work among the candidates when it fits, including several small changes. An explicit
 request for an independent review already supplies that benefit.
 
+Each candidate comes with a starting model and effort (`why.md`, "Model and effort"): one model per session, raise
+effort before changing model.
+
 Render the page with the candidates highlighted and open it:
 
 ```

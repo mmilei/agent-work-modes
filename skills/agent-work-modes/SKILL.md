@@ -106,6 +106,7 @@ For either loop form, agree the kickoff items in `reference/setup.md` ("Before t
 round: scope, budget, stop rule, model per piece, effort and dispatch.
 
 Ask before anything outside the repo: creating repos, scheduling routines, pushing.
+First loop in a project with a notes vault: offer the optional second-brain integration once (`reference/setup.md`).
 
 ## 5. Close
 

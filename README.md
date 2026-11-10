@@ -8,7 +8,9 @@ in setup and in how much you still understand at the end, and picking the wrong 
 notice afterwards. This skill asks until it has enough evidence to recommend a form, shows two or three candidates on a visual page, and once you pick,
 sets that form up in your repo.
 
-**[See the page](docs/index.html)**: one diagram per form, a decision tree, a map of autonomy against quota, and a
+[![The page: diagrams, decision tree, autonomy map](docs/preview.png)](docs/index.html)
+
+**[See the page](docs/index.html)** (once GitHub Pages is enabled from `docs/`, it lives at <https://mmilei.github.io/agent-work-modes/>): one diagram per form, a decision tree, a map of autonomy against quota, and a
 six-axis profile.
 
 ## Two layers

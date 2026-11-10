@@ -7,7 +7,7 @@
     {"id": "ontrack", "label": "Stays on track", "help": "How unlikely it is to drift off course without you noticing."},
     {"id": "understanding", "label": "Understanding", "help": "How much you understand of the result at the end."}
   ],
-  "scale": "0-3, higher is better on every axis. Ordinal judgement from the sources, not measurements.",
+  "scale": "0-3, higher is better on every axis. Ordinal judgement from the sources. Numbers under Low quota and Low re-read come from one run on sonnet (roman-numeral task, bench/README.md): one run, an anecdote, not a ranking.",
   "groups": {
     "pick": {"label": "Pick one per task", "help": "Each one answers 'how do I attack this?'. The stateful loop has two variants: whether each round re-reads the session or starts clean."},
     "addon": {"label": "Add to another", "help": "They do not attack the task on their own: they change where a form runs, who gives advice, or how work continues tomorrow."},
@@ -34,7 +34,8 @@
     },
     {
       "id": "goal", "group": "pick", "name": "/goal + goal contract",
-      "scores": [3, 1, 2, 1, 1, 1], "units": "1", "judge": ["model", "model"],
+      "scores": [3, 1, 2, 1, 1, 1],
+      "measured": {"mtok": 0.12, "reread_mtok": 0.09, "usd": 0.11, "session": "4445ab8b"}, "units": "1", "judge": ["model", "model"],
       "one": "A small model reads the conversation after every turn and decides whether the goal is met.",
       "when": "A one-sitting task whose end a command can prove.",
       "pro": "Zero setup; a fresh judge decides when it is done; works with claude -p.",
@@ -54,7 +55,8 @@
     },
     {
       "id": "subagents", "group": "pick", "name": "Subagents (orchestrator-worker)",
-      "scores": [2, 1, 1, 2, 2, 2], "units": "bounded pieces", "judge": ["det", "orchestrator"],
+      "scores": [2, 1, 1, 2, 2, 2],
+      "measured": {"mtok": 0.52, "reread_mtok": 0.41, "usd": 0.39, "session": "fa8af309"}, "units": "bounded pieces", "judge": ["det", "orchestrator"],
       "one": "The orchestrator splits the work, each worker solves one piece in its own context, and the orchestrator verifies.",
       "when": "Useful parallel work, context isolation, or a bounded independent review; piece count alone is not a reason.",
       "pro": "The main context stays clean; each worker can be isolated in a worktree.",
@@ -64,7 +66,8 @@
     },
     {
       "id": "workflow", "group": "pick", "name": "Dynamic workflow",
-      "scores": [1, 0, 3, 2, 2, 1], "units": "many", "judge": ["det", "gate + agents"],
+      "scores": [1, 0, 3, 2, 2, 1],
+      "measured": {"mtok": 0.24, "reread_mtok": 0.2, "usd": 0.19, "session": "15357a53"}, "units": "many", "judge": ["det", "gate + agents"],
       "one": "The graph as a script: a splitter cuts the work, workers run in parallel, plain code merges, a gate closes.",
       "when": "Repeated independent work where explicit coordination and merging improve coverage or throughput enough to justify setup.",
       "pro": "The plan is code you can read and rerun; cross-verification; resumes what already finished.",
@@ -74,7 +77,8 @@
     },
     {
       "id": "loop", "group": "pick", "variant": "Stateful loop", "name": "Stateful loop - in session",
-      "scores": [1, 0, 2, 0, 1, 1], "units": "1 per round", "judge": ["det", "VERIFY"],
+      "scores": [1, 0, 2, 0, 1, 1],
+      "measured": {"mtok": 0.12, "reread_mtok": 0.09, "usd": 0.12, "session": "9c38bf50"}, "units": "1 per round", "judge": ["det", "VERIFY"],
       "one": "The same session takes one item per round from a short state file, does it, verifies it and logs the evidence elsewhere.",
       "when": "A project of many items, each with a technical VERIFY, while you stay around.",
       "pro": "Moves item by item on its own; the state survives a /clear.",

@@ -106,9 +106,9 @@
       "id": "advisor", "group": "addon", "name": "Advisor",
       "scores": [3, 1, 0, 2, 2, 2], "units": "-", "judge": ["model", "expensive model"],
       "one": "A cheap model does the work and an expensive one weighs in only at the moments that matter.",
-      "when": "A long task where a few decisions carry the weight: the approach, a recurring error, the 'done'.",
-      "pro": "Cheaper than the expensive model on every turn.",
-      "con": "Experimental; still counts against the quota.",
+      "when": "Serial work that is hard only in spots: many turns between a few real decisions, and a smaller model stalls only on those.",
+      "pro": "The strong model is paid only when consulted, so its cost scales with how often the worker gets stuck.",
+      "con": "Helps only if the worker actually consults it; in Anthropic's own test it cost about 2.1x the worker alone for a gain at the edge of noise, and it cannot add capability the worker lacks. Beta tool; recheck each model release.",
       "diagram": {"n": [["w", 0, 0, "Worker\n(Sonnet)", "agent"], ["a", 1.7, 0, "Advisor\n(Opus)", "model"], ["o", 0, 1, "Result", "file"]],
                   "e": [["w", "a", "approach? repeated\nerror? done?"], ["a", "w", "advice", "back"], ["w", "o"]]}
     },
@@ -192,6 +192,7 @@
     "note": "A starting point, not an automatic choice: keep direct work as an alternative when setup outweighs the benefit. Without an automated check, delegated review stays bounded, not autonomous. If work continues tomorrow, add a context reset + handoff."
   },
   "sources": [
+    {"label": "Claude Platform docs - Optimizing for cost and intelligence", "url": "https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence"},
     {"label": "Anthropic - Effective harnesses for long-running agents", "url": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents"},
     {"label": "Anthropic - Effective context engineering for AI agents", "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"},
     {"label": "Claude Code docs - Hooks", "url": "https://code.claude.com/docs/en/hooks"}

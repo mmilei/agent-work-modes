@@ -22,7 +22,8 @@ notice afterwards.
 - **[A loop board](https://mmilei.github.io/agent-work-modes/board/)**: the live board the skill sets up for a loop,
   frozen at the end of the run that built this plugin (25 items, the flow by dependencies, progress, session log and
   the chat with the orchestrator). Local paths and private names were removed; the chat is rebuilt from two decisions
-  taken during that run. On a real loop it refreshes itself and the chat writes to the orchestrator's inbox
+  taken during that run. On a real loop it refreshes itself and, with `--reply`, each chat message is answered by a
+  short Sonnet session that reads the loop's state and ends, instead of a big session left watching
   (`scripts/loop-status.py`, `--snapshot` makes a static copy like this one).
 
 ## Two layers
@@ -80,7 +81,8 @@ skills/agent-work-modes/
   scripts/test_fresh_loop.py hermetic regression checks for the blocked-majority guard and round cap
   scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted, startup/peak context and cache rewrites per session
   scripts/test_session_cost.py offline checks for command arguments, dates and usage-tool failures
-  scripts/loop-status.py the loop board: live flow, progress, session log, chat to the orchestrator (--snapshot: static copy)
+  scripts/lean.py       the --lean flags shared by fresh-loop.py and the board's replier
+  scripts/loop-status.py the loop board: live flow, progress, session log, chat answered by a short Sonnet session per message (--reply; --snapshot: static copy)
 docs/index.html         the rendered page
 docs/board/             static snapshot of the loop board that built this plugin
 ```

@@ -28,6 +28,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from lean import lean_flags
+
 ap = argparse.ArgumentParser()
 ap.add_argument("--prompt", required=True, help="file with the prompt sent every round")
 ap.add_argument("--check", required=True, help="command that exits 0 when the work is done")
@@ -44,23 +46,10 @@ if args.rounds < 1:
 cli = shlex.split(args.cli)
 if (args.lean or args.measure) and cli[0] != "claude":
     ap.error("--lean and --measure only work with the claude CLI")
-
-
-def lean_flags():
-    try:
-        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
-    except FileNotFoundError:
-        top = ""
-    above = [(p / name).as_posix() for p in Path(top or ".").resolve().parents
-             for name in ("CLAUDE.md", "CLAUDE.local.md") if (p / name).is_file()]
-    flags = ["--tools", args.tools, "--disable-slash-commands", "--strict-mcp-config"]
-    return flags + (["--settings", json.dumps({"claudeMdExcludes": above})] if above else [])
-
-
 if args.lean:
     if "--settings" in extra:
         ap.error("--lean sets --settings itself; add claudeMdExcludes to your settings instead of passing both")
-    extra = lean_flags() + extra
+    extra = lean_flags(args.tools) + extra
 if args.measure:
     result = subprocess.run(["claude", "-p", "Reply only: ok", "--output-format", "json", *extra],
                             stdin=subprocess.DEVNULL, capture_output=True, text=True)

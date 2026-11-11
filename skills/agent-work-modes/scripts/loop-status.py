@@ -1,7 +1,7 @@
 """Live status board for a stateful loop (see reference/setup.md).
 
     python loop-status.py [--loop-dir DIR] [--loops-glob GLOB] [--repo DIR] [--transcripts DIR]
-                          [--log FILE] [--port 8765] [--title NAME] [--snapshot DIR]
+                          [--log FILE] [--port 8765] [--title NAME] [--snapshot DIR] [--reply [--reply-cli CMD]]
 
 Serves http://127.0.0.1:<port>/ (loop-status.html): the live flow of this loop (one node per item laid out by
 Depends, the driver and the current `claude -p` round with its subagents), progress bars, the session log, a chat
@@ -10,8 +10,12 @@ with the orchestrator and, below, the history of all loops. Data routes, rebuilt
 /history/classic (server-rendered history), /shots/<file> (screenshots).
 
 Chat: POST /chat {"text": ..., "refs": [...]} appends one JSON line {"ts", "from": "user", "text", "refs"} to
-<loop-dir>/orchestrator-inbox.jsonl. The orchestrator session watches that file (Monitor on `tail -f`) and answers by
-appending {"ts", "text"} lines to <loop-dir>/orchestrator-outbox.jsonl; the page shows both.
+<loop-dir>/orchestrator-inbox.jsonl; replies are {"ts", "text"} lines in <loop-dir>/orchestrator-outbox.jsonl and the
+page shows both. With --reply the board answers each message itself: one short headless session per message (default
+`claude -p --model sonnet`, lean, cwd = loop folder) gets the message, the recent chat, LOOP-STATE.md and the tails of
+LOOP-HISTORY.md and --log inline, may edit LOOP-STATE.md or create STOP in the loop folder, and ends. Messages are
+answered one at a time. A reply that starts with ESCALATE: carries a handoff for a new session with a stronger model.
+Without --reply, whoever orchestrates appends to the outbox by hand.
 
 --snapshot DIR writes the page and its data (flow.json, history.json, chat.json) as static files into DIR and exits,
 without live processes or transcripts: a read-only board that GitHub Pages can serve.
@@ -24,12 +28,16 @@ import argparse
 import html
 import json
 import os
+import queue
 import re
+import shlex
 import subprocess
 import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from lean import lean_flags
 
 COLORS = {"done": "#3fb950", "todo": "#6e7681", "now": "#f0883e", "blocked": "#f85149"}
 HERE = Path(__file__).resolve().parent
@@ -53,6 +61,8 @@ ap.add_argument("--log", default="", help="fresh-loop.py output file")
 ap.add_argument("--port", type=int, default=8765)
 ap.add_argument("--title", default="", help="page title (default: the repo or loop folder name)")
 ap.add_argument("--snapshot", default="", help="write a static read-only board into this folder and exit")
+ap.add_argument("--reply", action="store_true", help="answer each chat message with a short headless session")
+ap.add_argument("--reply-cli", default="claude -p --model sonnet", help="command for --reply; the prompt goes last")
 args = ap.parse_args()
 
 LOOP = Path(args.loop_dir).resolve()
@@ -613,7 +623,9 @@ def chat_messages():
             m = m if isinstance(m, dict) else {"text": str(m)}
             if str(m.get("text", "")).strip():
                 refs = m.get("refs") if who == "user" and isinstance(m.get("refs"), list) else []
-                out.append({"ts": str(m.get("ts", "")), "from": who, "text": str(m["text"]), "refs": refs})
+                out.append({"ts": str(m.get("ts", "")), "from": who, "text": str(m["text"]), "refs": refs,
+                            "escalate": who == "orchestrator" and str(m["text"]).lstrip().startswith("ESCALATE:"),
+                            "usd": m.get("usd")})
     return sorted(out, key=lambda m: m["ts"])
 
 
@@ -627,7 +639,74 @@ def add_chat(raw):
     rec = {"ts": datetime.now().isoformat(timespec="seconds"), "from": "user", "text": text.strip(), "refs": refs}
     with CHAT_LOCK, open(LOOP / INBOX, "a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    if args.reply:
+        REPLIES.put(rec)
     return rec
+
+
+REPLIES = queue.Queue()
+REPLY_TOOLS = "Read,Edit,Write,Glob,Grep"
+REPLY_PROMPT = """You answer the chat of a running agent loop from its status board, in place of a resident orchestrator
+session. Reply in a few lines, in the user's language. Everything you need to answer is below: use tools only to act.
+You may edit LOOP-STATE.md in this folder (add an item, change a state, Depends or wording, unblock an item) and create
+a file named STOP here to stop the loop after its current round; the next round reads them. Never touch anything else.
+If the message needs judgement beyond the loop's state (a design decision, a change of plan, reading the code), start
+the reply with "ESCALATE:" and add a 3-5 line handoff for a new session with a stronger model: what to decide, which
+files, what the loop is waiting on.
+
+## Message
+{text}
+Attached from the page: {refs}
+
+## Chat so far (oldest first)
+{chat}
+
+## LOOP-STATE.md
+{state}
+
+## LOOP-HISTORY.md (last part)
+{history}
+
+## Driver log (last lines)
+{log}
+"""
+
+
+def reply(rec):
+    """One short headless session answers one message; its reply, or why it failed, goes to the outbox."""
+    before = [m for m in chat_messages() if m["ts"] <= rec["ts"] and (m["ts"], m["text"]) != (rec["ts"], rec["text"])]
+    chat = "\n".join(f"{m['from']}: {m['text'][:500]}" for m in before[-8:]) or "(none)"
+    # the prompt is one argument: these caps keep it under Windows' 32k command-line limit
+    prompt = REPLY_PROMPT.format(text=rec["text"], refs=json.dumps(rec["refs"], ensure_ascii=False)[:2000], chat=chat,
+                                 state=read(LOOP / "LOOP-STATE.md")[-10000:] or "(missing)",
+                                 history=read(LOOP / "LOOP-HISTORY.md")[-3000:] or "(none)",
+                                 log=read(Path(args.log))[-1500:] if args.log else "(no --log)")
+    cmd = [*shlex.split(args.reply_cli), prompt]
+    claude = Path(cmd[0]).stem == "claude"
+    if claude:
+        cmd += lean_flags(REPLY_TOOLS, LOOP) + ["--permission-mode", "acceptEdits", "--output-format", "json"]
+    usd = None
+    try:
+        r = subprocess.run(cmd, cwd=LOOP, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=600)
+        text = r.stdout.strip()
+        if claude and text:
+            out = json.loads(text)
+            text, usd = str(out.get("result", "")).strip(), out.get("total_cost_usd")
+        if r.returncode or not text:
+            raise RuntimeError(f"exit {r.returncode}: {(r.stderr or text).strip()[:300]}")
+    except Exception as e:  # the worker must outlive any failure; the user sees it in the chat
+        text = f"Replier failed ({e}). Answer by hand or check --reply-cli."
+    rec = {"ts": datetime.now().isoformat(timespec="seconds"), "text": text}
+    if usd is not None:
+        rec["usd"] = round(float(usd), 4)
+    with CHAT_LOCK, open(LOOP / OUTBOX, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def reply_worker():
+    while True:
+        reply(REPLIES.get())
 
 
 class H(BaseHTTPRequestHandler):
@@ -711,4 +790,6 @@ if __name__ == "__main__" and args.snapshot:
     snapshot(Path(args.snapshot))
 elif __name__ == "__main__":
     print(f"loop status: http://127.0.0.1:{args.port}/", flush=True)
+    if args.reply:
+        threading.Thread(target=reply_worker, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1", args.port), H).serve_forever()

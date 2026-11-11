@@ -10,8 +10,9 @@ Sources: Claude Code transcripts (~/.claude/projects/*/*.jsonl and their subagen
 table of every state.db under %LOCALAPPDATA%/hermes or ~/.hermes, `parent_session_id` links a child). A missing source
 is skipped.
 
-Bands, top to bottom: you; interactive sessions and orchestrators; loops (headless `claude -p` rounds with the same
-first prompt form one node, Hermes cron runs); subagents and workers. Edges: launched (Agent/Task calls, a
+The page reads like a file tree: one row per session grouped by project, each session indented under the one that
+launched it, four or more of the same kind folded into one row, and a time bar per row. Loops: headless `claude -p`
+rounds with the same first prompt form one node; Hermes cron runs. Edges in /graph.json: launched (Agent/Task calls, a
 `claude -p` or fresh-loop.py command before a loop's first round, parent thread or session) and messages
 (SendMessage, by the target's name). A node's work mode comes from session-cost.py.
 Size = tokens processed (input + cache read + cache write + output), the same measure for every provider. Cost:
@@ -189,7 +190,7 @@ def build(hours):
         active = now - f.stat().st_mtime < ACTIVE_S
         sid = "c:" + f.stem
         n = node(sid, "claude", "interactive", d, mode=d["mode"], active=active, project=f.parent.name,
-                 label=d["name"] or d["prompt"][:60], monitors=d["monitors"], session=f.stem)
+                 name=d["name"], label=d["name"] or d["prompt"][:60], monitors=d["monitors"], session=f.stem)
         if d["name"]:
             names[d["name"]] = sid
         tops[sid] = (n, d)

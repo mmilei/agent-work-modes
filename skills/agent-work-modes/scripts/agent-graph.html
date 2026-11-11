@@ -9,7 +9,7 @@
 :root{
   --bg:#0a0f0c; --bg2:#0f1612; --card:#121a15; --card2:#16211a; --line:#1f2c24; --line2:#2a3a30;
   --chalk:#e9f1ea; --dim:#8a9b90; --faint:#56665c;
-  --done:#5ee08a; --blocked:#ff6b6b; --unblocked:#ffc145; --todo:#5b6b61; --accent:#9be15d; --tag:#7cc4ff;
+  --done:#5ee08a; --blocked:#ff6b6b; --accent:#9be15d; --tag:#7cc4ff;
   --display:'Big Shoulders Display',Impact,sans-serif; --mono:'JetBrains Mono',Consolas,monospace;
 }
 *{box-sizing:border-box}
@@ -29,26 +29,38 @@ header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
 .bar select,.bar input[type=text]{background:var(--bg2);color:var(--chalk);border:1px solid var(--line2);border-radius:6px;
   padding:4px 8px;font:inherit}
 .bar label{display:flex;gap:4px;align-items:center;cursor:pointer}
+.bar button{all:unset;cursor:pointer;color:var(--tag)}
 main{display:grid;grid-template-columns:1fr 330px;gap:12px;padding:0 24px 24px}
-@media (max-width:900px){main{grid-template-columns:1fr}}
-#wrap{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto;position:relative}
-svg{display:block}
-.band{fill:var(--bg2)}.band.alt{fill:#0c130f}
-.band-label{fill:var(--faint);font:600 10.5px var(--mono);letter-spacing:.12em;text-transform:uppercase}
-.ax{fill:var(--dim);font:500 10.5px var(--mono)}.grid{stroke:var(--line);stroke-width:1}
-.now-line{stroke:var(--accent);stroke-dasharray:3 4}
-.edge{fill:none;stroke:#35503f;opacity:.75}
-.edge.messages{stroke:var(--tag);stroke-dasharray:5 4}
-.edge.prompts{stroke:#2a3a30;opacity:.45}
-.edge.hl{stroke:var(--accent);opacity:1}
-.span{stroke-width:3;stroke-linecap:round;opacity:.45}
-.n{cursor:pointer}.n .shape{stroke:var(--bg);stroke-width:1.5}
-.n.active .shape{stroke:var(--chalk);stroke-width:2.2}
-.n.active .ring{fill:none;stroke:var(--accent);animation:pulse 1.6s infinite}
-@keyframes pulse{0%{opacity:.9;stroke-width:1}100%{opacity:0;stroke-width:7}}
-.n.sel .shape{stroke:var(--accent);stroke-width:3}
-.dimmed{opacity:.18}
-.n text{fill:var(--chalk);font:500 10.5px Inter,sans-serif;pointer-events:none}
+@media (max-width:1000px){main{grid-template-columns:1fr}}
+#list{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto;min-width:0}
+.grid{display:grid;grid-template-columns:minmax(380px,1.7fr) 74px 70px minmax(240px,1.5fr);min-width:820px}
+.hd{position:sticky;top:0;z-index:2;background:var(--card);border-bottom:1px solid var(--line2);
+  font:600 10.5px var(--mono);color:var(--faint);letter-spacing:.1em;text-transform:uppercase;padding:8px 10px}
+.hd.num{text-align:right}
+.axis{position:relative;height:100%}
+.axis span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
+.r{display:contents}
+.r > div{border-bottom:1px solid var(--line);padding:5px 10px;min-width:0;display:flex;align-items:center}
+.r:hover > div{background:var(--card2)}
+.r.sel > div{background:#1b2a20}
+.r.proj > div{background:var(--bg2);border-top:1px solid var(--line2);padding-top:9px;padding-bottom:9px}
+.name{gap:7px;cursor:pointer;overflow:hidden}
+.tw{width:14px;flex:none;color:var(--faint);font:600 11px var(--mono);text-align:center}
+.sw{width:9px;height:9px;border-radius:50%;flex:none;background:var(--k)}
+.sw.codex{border-radius:2px}.sw.hermes{border-radius:1px;transform:rotate(45deg)}
+.sw.live{box-shadow:0 0 0 3px #9be15d55;animation:blink 1.6s infinite}
+.lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lbl b{font-weight:600}.lbl .sub{color:var(--faint);margin-left:6px}
+.proj .lbl b{font:800 17px var(--display);letter-spacing:.04em;text-transform:uppercase}
+.mode{font:600 10.5px var(--mono);color:var(--k);flex:none;text-transform:lowercase}
+.chip{font:600 10.5px var(--mono);color:var(--tag);border:1px solid #7cc4ff44;border-radius:4px;padding:0 5px;flex:none;white-space:nowrap}
+.num{justify-content:flex-end;white-space:nowrap;font:500 11.5px var(--mono);color:var(--dim);font-variant-numeric:tabular-nums}
+.track{position:relative;height:22px;width:100%}
+.gl{position:absolute;top:-6px;bottom:-6px;width:1px;background:var(--line)}
+.now{position:absolute;top:-6px;bottom:-6px;width:1px;background:var(--accent);opacity:.6}
+.seg{position:absolute;top:7px;height:8px;border-radius:4px;background:var(--k);opacity:.75;min-width:3px}
+.seg.live{opacity:1;box-shadow:0 0 8px var(--k)}
+.proj .seg{top:9px;height:4px;opacity:.5}
 .pane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;align-self:start;
   position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
 .pane h2{font:800 20px var(--display);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;color:var(--k,var(--chalk))}
@@ -59,9 +71,6 @@ svg{display:block}
 .pane button{all:unset;cursor:pointer;display:block;font-size:12.5px;color:var(--tag);margin:2px 0}
 .legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--dim);font-size:12px;padding:10px 12px;border-top:1px solid var(--line)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
-#tip{position:fixed;pointer-events:none;background:var(--card2);border:1px solid var(--line2);border-radius:8px;
-  padding:7px 10px;font-size:12px;max-width:340px;opacity:0;box-shadow:0 10px 26px #000a}
-#tip .t{font:500 10.5px var(--mono);color:var(--faint)}
 </style>
 </head>
 <body>
@@ -76,33 +85,37 @@ svg{display:block}
   <label><input type="checkbox" data-p="claude" checked>Claude</label>
   <label><input type="checkbox" data-p="codex" checked>Codex</label>
   <label><input type="checkbox" data-p="hermes" checked>Hermes</label>
-  <label><input type="checkbox" id="human" checked>edges from you</label>
+  <label><input type="checkbox" id="empty">sessions with no model call</label>
   project <input type="text" id="proj" placeholder="filter" size="16">
+  <button id="expand">expand all</button><button id="collapse">collapse all</button>
 </div>
 <main>
-  <div id="wrap"><svg id="g"></svg>
-    <div class="legend" id="legend"></div></div>
-  <aside class="pane" id="pane"><h2>Click a node</h2><p class="pn">Size = tokens processed. Bar = from first to last
-    activity. Pulsing ring = written in the last 5 minutes. Circle Claude, square Codex, diamond Hermes.
-    Solid edge = launched, dashed blue = messages (SendMessage), faint = your prompts.</p></aside>
+  <div id="list"><div class="grid" id="grid"></div><div class="legend" id="legend"></div></div>
+  <aside class="pane" id="pane"><h2>Read it like a file tree</h2><p class="pn">One row per session, grouped by project.
+    A session that another one launched sits indented under it; four or more of the same kind fold into one row (click
+    ▸ to open). The bar runs from first to last activity; a glowing bar or a pulsing dot means it wrote something in the
+    last 5 minutes. Blue chips are messages sent (SendMessage). Click a row for its numbers.</p></aside>
 </main>
-<div id="tip"></div>
 <script>
 const MODE = {
   'conversation': '#7cc4ff', 'conversation + subagents': '#9be15d', 'loop in session': '#ffc145',
   'workflow': '#d2a8ff', 'fresh-loop round': '#f0883e', 'steering a loop': '#ff6b6b', 'subagent': '#5ee08a',
-  'codex': '#56d4c4', 'codex subagent': '#3a9e92', 'unresolved': '#56665c', 'human': '#e9f1ea'
+  'codex': '#56d4c4', 'codex subagent': '#3a9e92', 'unresolved': '#56665c'
 };
 const color = m => MODE[m] || (m && m.startsWith('hermes') ? '#e3b6ff' : '#8a9b90');
-const BANDS = [['you', 'you'], ['interactive', 'interactive · orchestrators'], ['loops', 'loops · headless runs · cron'],
-  ['subagents', 'subagents · workers']];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const fmtT = t => new Date(t * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
 const fmtN = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' M' : n >= 1e3 ? Math.round(n / 1e3) + ' k' : String(n || 0);
 const dur = s => s < 60 ? Math.round(s) + ' s' : s < 3600 ? Math.round(s / 60) + ' min' : (s / 3600).toFixed(1) + ' h';
-const radius = n => n.id === 'you' ? 14 : 4 + 5 * Math.log10(1 + (n.tokens || 0) / 1e5);
-let DATA = null, SEL = null;
 const $ = id => document.getElementById(id);
+// "D--Maxi-git-claude-obsidian-workspace-agent-work-modes" -> "agent-work-modes"
+const project = n => {
+  const p = n.project || '?';
+  const tail = p.includes('-workspace-') ? p.split('-workspace-').pop() : p.includes('-git-') ? p.split('-git-').pop() : p;
+  return tail || p;
+};
+let DATA = null, SEL = null;
+const OPEN = new Set(), CLOSED = new Set();  // folds the viewer toggled, kept across refreshes
 
 async function load() {
   try {
@@ -115,157 +128,178 @@ async function load() {
 function visible() {
   const on = new Set([...document.querySelectorAll('[data-p]')].filter(c => c.checked).map(c => c.dataset.p));
   const q = $('proj').value.trim().toLowerCase();
-  const keep = new Map();
-  for (const n of DATA.nodes) {
-    if (n.id === 'you') { keep.set(n.id, n); continue; }
-    if (n.provider !== 'unknown' && !on.has(n.provider)) continue;
-    if (q && !((n.project || '') + ' ' + (n.cwd || '') + ' ' + (n.label || '')).toLowerCase().includes(q)) continue;
-    keep.set(n.id, n);
-  }
-  let edges = DATA.edges.filter(e => keep.has(e.from) && keep.has(e.to) && (e.kind !== 'prompts' || $('human').checked));
-  // unresolved targets only stay when something messages them
-  for (const n of [...keep.values()]) if (n.provider === 'unknown' && !edges.some(e => e.to === n.id)) keep.delete(n.id);
-  edges = edges.filter(e => keep.has(e.to));
-  return {nodes: [...keep.values()], edges};
+  return DATA.nodes.filter(n => n.id !== 'you' && n.provider !== 'unknown' && on.has(n.provider) &&
+    (n.tokens > 0 || n.active || $('empty').checked) &&
+    (!q || (project(n) + ' ' + (n.cwd || '') + ' ' + (n.label || '')).toLowerCase().includes(q)));
 }
 
-function layout(nodes, W, labeled) {
-  const L = 190, R = 24, x0 = DATA.since, x1 = DATA.now;
-  const X = t => L + (Math.min(Math.max(t, x0), x1) - x0) / (x1 - x0) * (W - L - R);
-  const pos = new Map(), bands = [];
-  let y = 34;
-  for (const [key, title] of BANDS) {
-    const list = nodes.filter(n => n.band === key).sort((a, b) => a.start - b.start);
-    const rows = [];  // greedy packing: each row keeps its right edge
-    const ROW = {you: 40, interactive: 30}[key] || 22;
-    for (const n of list) {
-      const r = radius(n), x = key === 'you' ? L - 40 : X(n.start);
-      const text = labeled.has(n.id) ? 10 + 5.6 * Math.min(42, (n.label || '').length) : 0;
-      const right = Math.max(x + r + text, X(n.end || n.start)) + 6;
-      let i = rows.findIndex(edge => edge < x - r);
-      if (i < 0) { i = rows.length; rows.push(0); }
-      rows[i] = right;
-      pos.set(n.id, {x, y: y + 36 + i * ROW, r, x2: X(n.end || n.start)});
+// tree rows: project -> root sessions -> children (folded by kind when 4 or more)
+function rows(nodes) {
+  const ids = new Set(nodes.map(n => n.id));
+  const parent = new Map(), kids = new Map(), sends = new Map();
+  for (const e of DATA.edges) {
+    if (e.kind === 'launched' && ids.has(e.from) && ids.has(e.to)) {
+      parent.set(e.to, e.from);
+      (kids.get(e.from) || kids.set(e.from, []).get(e.from)).push(e.to);
     }
-    const h = Math.max(1, rows.length) * ROW + 36;
-    bands.push({key, title, y, h, count: list.length});
-    y += h;
+    if (e.kind === 'messages' && ids.has(e.from)) (sends.get(e.from) || sends.set(e.from, []).get(e.from)).push(e);
   }
-  return {pos, bands, H: y + 10, X, L};
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const projects = new Map();
+  for (const n of nodes) if (!parent.has(n.id)) {
+    const p = project(n);
+    (projects.get(p) || projects.set(p, []).get(p)).push(n);
+  }
+  const out = [];
+  const memo = new Map();
+  function sub(id) {  // totals of everything below a node
+    if (memo.has(id)) return memo.get(id);
+    const r = {tokens: 0, active: false};
+    for (const k of kids.get(id) || []) { const n = byId.get(k), s = sub(k); r.tokens += n.tokens + s.tokens; r.active ||= n.active || s.active; }
+    memo.set(id, r);
+    return r;
+  }
+  const span = list => ({start: Math.min(...list.map(n => n.start)), end: Math.max(...list.map(n => n.end || n.start)),
+    tokens: list.reduce((s, n) => s + (n.tokens || 0) + sub(n.id).tokens, 0),
+    cost: list.reduce((s, n) => s + (n.cost || 0), 0), active: list.some(n => n.active || sub(n.id).active)});
+  function walk(n, depth, path) {
+    const ch = (kids.get(n.id) || []).map(k => byId.get(k)).sort((a, b) => a.start - b.start);
+    const key = path + '/' + n.id;
+    const open = ch.length > 0 && (OPEN.has(key) || (!CLOSED.has(key) && depth < 2));
+    out.push({kind: 'node', n, depth, key, hasKids: ch.length > 0, open, sends: sends.get(n.id) || []});
+    if (!open) return;
+    const groups = new Map();
+    for (const c of ch) (groups.get(c.mode) || groups.set(c.mode, []).get(c.mode)).push(c);
+    for (const [mode, list] of groups) {
+      if (list.length < 4) { list.forEach(c => walk(c, depth + 1, key)); continue; }
+      const gk = key + '/#' + mode, gopen = OPEN.has(gk);
+      out.push({kind: 'group', mode, list, depth: depth + 1, key: gk, open: gopen, ...span(list)});
+      if (gopen) list.forEach(c => walk(c, depth + 2, gk));
+    }
+  }
+  const order = [...projects.entries()].map(([p, list]) => [p, list, span(list)]).sort((a, b) => b[2].end - a[2].end);
+  for (const [p, list, s] of order) {
+    const key = 'p:' + p, open = !CLOSED.has(key);
+    out.push({kind: 'proj', name: p, count: list.length, key, open, ...s});
+    if (open) list.sort((a, b) => a.start - b.start).forEach(n => walk(n, 1, key));
+  }
+  return out;
 }
 
 function draw() {
-  const W = Math.max(600, $('wrap').clientWidth);
-  const {nodes, edges} = visible();
-  const big = new Set(nodes.filter(n => n.id !== 'you').sort((a, b) => b.tokens - a.tokens).slice(0, 14).map(n => n.id));
-  if (SEL) big.add(SEL);
-  const {pos, bands, H, X, L} = layout(nodes, W, big);
-  const out = [];
-  bands.forEach((b, i) => {
-    out.push(`<rect class="band ${i % 2 ? 'alt' : ''}" x="0" y="${b.y}" width="${W}" height="${b.h}"/>`,
-      `<text class="band-label" x="14" y="${b.y + 18}">${esc(b.title)} · ${b.count}</text>`);
-  });
-  const span = DATA.now - DATA.since, fit = Math.max(2, (W - L) / 90);
-  const step = [3600, 2 * 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400].find(s => span / s <= fit) || 2 * 86400;
+  const nodes = visible();
+  const list = rows(nodes);
+  const x0 = DATA.since, x1 = DATA.now;
+  const pct = t => (Math.min(Math.max(t, x0), x1) - x0) / (x1 - x0) * 100;
+  const span = x1 - x0, step = [3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400].find(s => span / s <= 8) || 2 * 86400;
+  const ticks = [];
+  for (let t = Math.ceil(x0 / step) * step; t < x1; t += step) ticks.push(t);
   const tick = t => { const d = new Date(t * 1000); return d.getHours() ? d.getHours() + 'h' : d.toLocaleDateString([], {day: 'numeric', month: 'short'}); };
-  for (let t = Math.ceil(DATA.since / step) * step; t <= DATA.now; t += step) {
-    const x = X(t);
-    out.push(`<line class="grid" x1="${x}" x2="${x}" y1="24" y2="${H}"/><text class="ax" x="${x + 3}" y="16">${esc(tick(t))}</text>`);
+  const grid = ticks.map(t => `<i class="gl" style="left:${pct(t)}%"></i>`).join('') + `<i class="now" style="left:100%"></i>`;
+  const bar = (s, e, k, live) => `<div class="track">${grid}<i class="seg ${live ? 'live' : ''}" style="--k:${k};left:${pct(s)}%;width:calc(${pct(e || s) - pct(s)}% + 3px)"></i></div>`;
+  const pad = d => `padding-left:${10 + d * 18}px`;
+  const html = [`<div class="hd">session</div><div class="hd num">tokens</div><div class="hd num">cost</div>
+    <div class="hd"><div class="axis">${ticks.map(t => `<span style="left:${pct(t)}%">${esc(tick(t))}</span>`).join('')}</div></div>`];
+  for (const r of list) {
+    if (r.kind === 'proj') {
+      html.push(`<div class="r proj" data-fold="${esc(r.key)}"><div class="name"><span class="tw">${r.open ? '▾' : '▸'}</span>
+        <span class="lbl"><b>${esc(r.name)}</b><span class="sub">${r.count} root session${r.count > 1 ? 's' : ''}</span></span></div>
+        <div class="num">${fmtN(r.tokens)}</div><div class="num">${r.cost ? '$' + r.cost.toFixed(2) : ''}</div>
+        <div>${bar(r.start, r.end, 'var(--dim)', r.active)}</div></div>`);
+    } else if (r.kind === 'group') {
+      const k = color(r.mode);
+      html.push(`<div class="r" data-fold="${esc(r.key)}"><div class="name" style="${pad(r.depth)}"><span class="tw">${r.open ? '▾' : '▸'}</span>
+        <span class="sw ${r.active ? 'live' : ''}" style="--k:${k}"></span><span class="lbl"><b>${r.list.length} × ${esc(r.mode)}</b></span></div>
+        <div class="num">${fmtN(r.tokens)}</div><div class="num">${r.cost ? '$' + r.cost.toFixed(2) : ''}</div>
+        <div>${bar(r.start, r.end, k, r.active)}</div></div>`);
+    } else {
+      const n = r.n, k = color(n.mode);
+      const title = n.name || (n.mode === 'subagent' ? n.label : '') || '';
+      const rest = (n.rounds > 1 ? `${n.rounds} runs · ` : '') + (title ? '' : (n.prompt || n.label || ''));
+      const chips = r.sends.slice(0, 2).map(e => {
+        const t = DATA.nodes.find(m => m.id === e.to);
+        const who = e.to.startsWith('?:uds:') ? 'peer session' : (t && (t.name || t.alias || t.label) || e.to).slice(0, 18);
+        return `<span class="chip">→ ${esc(who)} ×${e.n}</span>`;
+      }).join('') + (r.sends.length > 2 ? `<span class="chip">+${r.sends.length - 2}</span>` : '');
+      html.push(`<div class="r ${SEL === n.id ? 'sel' : ''}" data-id="${esc(n.id)}" ${r.hasKids ? `data-fold="${esc(r.key)}"` : ''}>
+        <div class="name" style="${pad(r.depth)}"><span class="tw">${r.hasKids ? (r.open ? '▾' : '▸') : ''}</span>
+        <span class="sw ${n.provider} ${n.active ? 'live' : ''}" style="--k:${k}"></span><span class="mode" style="--k:${k}">${esc(n.mode)}</span>
+        <span class="lbl">${title ? `<b>${esc(title)}</b>` : ''}<span class="sub">${esc(rest.slice(0, 90))}</span></span>${chips}</div>
+        <div class="num">${fmtN(n.tokens)}</div><div class="num">${n.cost != null ? '$' + n.cost.toFixed(2) : ''}</div>
+        <div>${bar(n.start, n.end, k, n.active)}</div></div>`);
+    }
   }
-  out.push(`<line class="now-line" x1="${X(DATA.now)}" x2="${X(DATA.now)}" y1="24" y2="${H}"/>`);
-  const linked = new Set(SEL ? [SEL] : []);
-  if (SEL) edges.forEach(e => { if (e.from === SEL) linked.add(e.to); if (e.to === SEL) linked.add(e.from); });
-  for (const e of edges) {
-    const a = pos.get(e.from), b = pos.get(e.to);
-    if (!a || !b) continue;
-    const w = e.kind === 'prompts' ? 1 : 1.2 + Math.log2(e.n);
-    const my = (a.y + b.y) / 2;
-    const hl = SEL && (e.from === SEL || e.to === SEL);
-    out.push(`<path class="edge ${e.kind} ${hl ? 'hl' : SEL ? 'dimmed' : ''}" stroke-width="${w}"
-      d="M${a.x},${a.y} C${a.x},${my} ${b.x},${my} ${b.x},${b.y}"><title>${esc(e.kind)} ×${e.n}</title></path>`);
-  }
-  for (const n of nodes) {
-    const p = pos.get(n.id), c = color(n.mode), dim = SEL && !linked.has(n.id) ? 'dimmed' : '';
-    let shape;
-    if (n.provider === 'codex') shape = `<rect class="shape" x="${p.x - p.r}" y="${p.y - p.r}" width="${2 * p.r}" height="${2 * p.r}" rx="2" fill="${c}"/>`;
-    else if (n.provider === 'hermes') shape = `<rect class="shape" x="${p.x - p.r}" y="${p.y - p.r}" width="${2 * p.r}" height="${2 * p.r}" fill="${c}" transform="rotate(45 ${p.x} ${p.y})"/>`;
-    else shape = `<circle class="shape" cx="${p.x}" cy="${p.y}" r="${p.r}" fill="${c}" ${n.provider === 'unknown' ? 'fill-opacity=".25" stroke-dasharray="2 2"' : ''}/>`;
-    out.push(`<g class="n ${n.active ? 'active' : ''} ${SEL === n.id ? 'sel' : ''} ${dim}" data-id="${esc(n.id)}">`,
-      n.id !== 'you' && p.x2 > p.x + 2 ? `<line class="span" x1="${p.x}" x2="${p.x2}" y1="${p.y}" y2="${p.y}" stroke="${c}"/>` : '',
-      n.active ? `<circle class="ring" cx="${p.x}" cy="${p.y}" r="${p.r + 3}"/>` : '', shape,
-      big.has(n.id) || n.id === 'you' ? `<text x="${p.x + p.r + 5}" y="${p.y + 4}">${esc((n.label || '').slice(0, 42))}</text>` : '',
-      '</g>');
-  }
-  const g = $('g');
-  g.setAttribute('width', W); g.setAttribute('height', H); g.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  g.innerHTML = out.join('');
-  kpis(nodes, edges);
-  legend(nodes);
+  $('grid').innerHTML = html.join('');
+  kpis(nodes);
+  $('legend').innerHTML = [...new Set(nodes.map(n => n.mode))].map(m => `<span><i style="background:${color(m)}"></i>${esc(m)}</span>`).join('');
   $('stamp').textContent = `updated ${new Date(DATA.now * 1000).toLocaleTimeString()} · last ${DATA.hours} h`;
   $('costnote').textContent = DATA.cost_at ? `Claude cost from ccusage at ${new Date(DATA.cost_at * 1000).toLocaleTimeString()} (API list price)`
     : 'Claude cost pending (ccusage) or off';
   if (SEL) pane(SEL);
 }
 
-function kpis(nodes, edges) {
-  const real = nodes.filter(n => n.id !== 'you' && n.provider !== 'unknown');
-  const cost = real.reduce((s, n) => s + (n.cost || 0), 0);
-  const sum = k => edges.filter(e => e.kind === k).reduce((s, e) => s + e.n, 0);
-  const items = [[real.length, 'sessions'], [real.filter(n => n.active).length, 'running now'],
-    [fmtN(real.reduce((s, n) => s + n.tokens, 0)), 'tokens processed'], ['US$ ' + cost.toFixed(2), 'estimated cost'],
-    [sum('launched'), 'launches'], [sum('messages'), 'messages'], [sum('prompts'), 'your prompts']];
+function kpis(nodes) {
+  const ids = new Set(nodes.map(n => n.id));
+  const sum = k => DATA.edges.filter(e => e.kind === k && ids.has(e.from)).reduce((s, e) => s + e.n, 0);
+  const items = [[nodes.length, 'sessions'], [nodes.filter(n => n.active).length, 'running now'],
+    [fmtN(nodes.reduce((s, n) => s + n.tokens, 0)), 'tokens processed'],
+    ['US$ ' + nodes.reduce((s, n) => s + (n.cost || 0), 0).toFixed(2), 'estimated cost'],
+    [sum('launched'), 'launches'], [sum('messages'), 'messages'],
+    [DATA.edges.filter(e => e.kind === 'prompts' && ids.has(e.to)).reduce((s, e) => s + e.n, 0), 'your prompts']];
   $('kpis').innerHTML = items.map(([v, l]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join('');
-}
-
-function legend(nodes) {
-  const modes = [...new Set(nodes.map(n => n.mode))];
-  $('legend').innerHTML = modes.map(m => `<span><i style="background:${color(m)}"></i>${esc(m)}</span>`).join('');
 }
 
 function pane(id) {
   const n = DATA.nodes.find(x => x.id === id);
   if (!n) return;
-  const ins = DATA.edges.filter(e => e.to === id), outs = DATA.edges.filter(e => e.from === id);
-  const name = x => { const m = DATA.nodes.find(k => k.id === x); return m ? (m.label || m.id).slice(0, 48) : x; };
+  const ins = DATA.edges.filter(e => e.to === id && e.kind !== 'prompts'), outs = DATA.edges.filter(e => e.from === id);
+  const name = x => { const m = DATA.nodes.find(k => k.id === x); return m ? (m.name || m.label || m.id).slice(0, 48) : x; };
   const link = (x, txt) => `<button data-go="${esc(x)}">${esc(txt)}</button>`;
-  const rows = [['provider', n.provider], ['mode', n.mode], ['project', n.project], ['cwd', n.cwd],
+  const rows = [['provider', n.provider], ['mode', n.mode], ['project', project(n)], ['cwd', n.cwd],
     ['started', n.start && fmtT(n.start)], ['last activity', n.end && fmtT(n.end)],
     ['duration', n.end && n.start && dur(n.end - n.start)], ['state', n.active ? 'running' : 'idle / finished'],
     ['models', (n.models || []).join(', ')], ['tokens', fmtN(n.tokens)],
     ['input / output', `${fmtN(n.tok[0])} / ${fmtN(n.tok[1])}`], ['cache read / write', `${fmtN(n.tok[2])} / ${fmtN(n.tok[3])}`],
-    ['cost', n.cost != null ? 'US$ ' + n.cost.toFixed(2) : '—'], ['prompts', n.prompts], ['runs', n.rounds || ''],
+    ['cost', n.cost != null ? 'US$ ' + n.cost.toFixed(2) : '—'], ['your prompts', n.prompts], ['runs', n.rounds || ''],
     ['messages sent', n.sends || ''], ['Monitor calls', n.monitors || ''], ['agent type', n.kind], ['session', n.session || n.id]]
     .filter(([, v]) => v !== undefined && v !== '' && v !== null && v !== 0);
   $('pane').style.setProperty('--k', color(n.mode));
-  $('pane').innerHTML = `<h2>${esc(n.mode)}</h2><p class="pn">${esc(n.label)}</p>
+  $('pane').innerHTML = `<h2>${esc(n.mode)}</h2><p class="pn">${esc(n.name || n.label)}</p>
     <dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-    ${ins.length ? `<h3>From</h3>${ins.map(e => link(e.from, `${e.kind} ×${e.n} · ${name(e.from)}`)).join('')}` : ''}
-    ${outs.length ? `<h3>To</h3>${outs.slice(0, 60).map(e => link(e.to, `${e.kind} ×${e.n} · ${name(e.to)}`)).join('')}` : ''}
+    ${ins.length ? `<h3>Launched by</h3>${ins.map(e => link(e.from, `${e.kind} ×${e.n} · ${name(e.from)}`)).join('')}` : ''}
+    ${outs.length ? `<h3>Launched / messaged</h3>${outs.slice(0, 60).map(e => link(e.to, `${e.kind} ×${e.n} · ${name(e.to)}`)).join('')}` : ''}
     ${n.prompt ? `<h3>First prompt</h3><p class="pn">${esc(n.prompt)}</p>` : ''}`;
 }
 
-$('g').addEventListener('click', ev => {
-  const g = ev.target.closest('.n');
-  SEL = g && g.dataset.id !== SEL ? g.dataset.id : null;
+function toggle(key, wasOpen) {
+  if (wasOpen) { OPEN.delete(key); CLOSED.add(key); } else { CLOSED.delete(key); OPEN.add(key); }
+}
+$('grid').addEventListener('click', ev => {
+  const row = ev.target.closest('.r');
+  if (!row) return;
+  const fold = row.dataset.fold, onArrow = ev.target.closest('.tw');
+  if (fold && (onArrow || !row.dataset.id)) {
+    toggle(fold, row.querySelector('.tw').textContent === '▾');
+  } else if (row.dataset.id) {
+    SEL = row.dataset.id;
+  }
   draw();
-  if (!SEL) $('pane').innerHTML = '<h2>Click a node</h2>';
 });
 $('pane').addEventListener('click', ev => {
   const b = ev.target.closest('[data-go]');
   if (b) { SEL = b.dataset.go; draw(); }
 });
-$('g').addEventListener('mousemove', ev => {
-  const g = ev.target.closest('.n'), tip = $('tip');
-  if (!g) { tip.style.opacity = 0; return; }
-  const n = DATA.nodes.find(x => x.id === g.dataset.id);
-  tip.innerHTML = `<b>${esc(n.label)}</b><div class="t">${esc(n.mode)} · ${fmtN(n.tokens)} tok${n.cost != null ? ' · US$ ' + n.cost.toFixed(2) : ''}</div>`;
-  tip.style.left = Math.min(ev.clientX + 14, innerWidth - 350) + 'px';
-  tip.style.top = ev.clientY + 14 + 'px';
-  tip.style.opacity = 1;
+$('expand').addEventListener('click', () => {
+  document.querySelectorAll('[data-fold]').forEach(r => { CLOSED.delete(r.dataset.fold); OPEN.add(r.dataset.fold); });
+  draw();
+});
+$('collapse').addEventListener('click', () => {
+  OPEN.clear();
+  document.querySelectorAll('[data-fold]').forEach(r => CLOSED.add(r.dataset.fold));
+  draw();
 });
 document.querySelectorAll('.bar input').forEach(i => i.addEventListener('input', () => DATA && draw()));
 $('hours').addEventListener('change', load);
-addEventListener('resize', () => DATA && draw());
 load();
 setInterval(load, 15000);
 </script>

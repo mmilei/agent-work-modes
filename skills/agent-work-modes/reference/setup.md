@@ -237,9 +237,9 @@ Windows, hidden and detached:
 To stop it, kill the `python` process whose command line contains `loop-status.py` and its port.
 
 To see every agent at once instead of one loop, `python scripts/agent-graph.py` serves
-http://127.0.0.1:8766/: one node per Claude Code, Codex and Hermes session on this machine, in bands (you, interactive
-sessions, loops and headless runs, subagents) along a time axis, with edges for launches and SendMessage messages and
-the numbers of a session on click. It re-reads only the files that changed and calls no model; `--no-cost` skips the
+http://127.0.0.1:8766/: one row per Claude Code, Codex and Hermes session on this machine, grouped by project, each indented under the
+session that launched it (four or more of a kind fold into one row), with a time bar, SendMessage chips and the numbers
+of a session on click. It re-reads only the files that changed and calls no model; `--no-cost` skips the
 background ccusage run that prices Claude sessions.
 
 | Flag | Default | Meaning |

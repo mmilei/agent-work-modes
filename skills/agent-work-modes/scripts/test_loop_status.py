@@ -73,7 +73,8 @@ def test_flow_and_chat():
             assert len((loop / "orchestrator-inbox.jsonl").read_text(encoding="utf-8").splitlines()) == 1
 
             with open(loop / "orchestrator-outbox.jsonl", "a", encoding="utf-8") as out:
-                out.write(json.dumps({"ts": "2999-01-01T00:00:00", "text": "It waits on #2."}) + "\n")
+                out.write(json.dumps({"ts": "2999-01-01T00:00:00", "text": "It waits on #2.", "usd": 0.03}) + "\n")
+            assert json.loads(call(port, "/flow.json")[1])["steer_usd"] == 0.03, "chat replies count as steering cost"
             chat = json.loads(call(port, "/chat")[1])
             assert [m["from"] for m in chat] == ["user", "orchestrator"] and chat[1]["text"] == "It waits on #2."
             code, body = call(port, "/")

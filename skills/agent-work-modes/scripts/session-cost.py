@@ -8,6 +8,11 @@ Runs a pinned ccusage release through npx (or reads a saved output), joins every
 session. `ctx` is the context of the session's first and largest model call (the startup load is re-read on every
 step; a resumed session starts at its resume point); `rewrites` counts calls that wrote most of the context to cache
 again after at least 5 minutes without calls, the sign of an expired cache.
+Each session also gets a work mode, deduced from what it did, not from a label (first match wins): a board chat reply
+(headless, the replier's prompt) and a session that used Monitor or SendMessage count as steering a loop; any other
+headless `claude -p` session is a fresh-loop round; ScheduleWakeup or a `/loop` prompt is a loop in session; then
+workflow, conversation + subagents, conversation. Per mode: tokens processed per output token (the context re-read
+on every step shows up here) and the share of the spend.
 Costs are API-price estimates, not actual charges or subscription-quota percentages.
 Prompt-based grouping is heuristic; use session IDs and the run's usage log for exact attribution.
 """
@@ -49,20 +54,24 @@ files = {f.stem: f for f in (Path.home() / ".claude" / "projects").glob("*/*.jso
 
 
 def first_prompt_and_tools(f):
-    """First prompt, Agent calls, start time and context per model call: startup, peak, and cache rewrites."""
+    """First prompt, Agent calls, start time, context per model call (startup, peak, cache rewrites), work mode."""
     prompt, agents, start, ctx, rewrites, seen, last = "", 0, "", [], 0, set(), None
+    headless, tools, processed, written = False, set(), 0, 0
     for line in f.open(encoding="utf-8", errors="replace"):
         try:
             e = json.loads(line)
         except ValueError:
             continue
         start = start or e.get("timestamp", "")
+        headless = headless or e.get("entrypoint") == "sdk-cli"
         msg = e.get("message") or {}
         if e.get("type") == "user" and not prompt:
             c = msg.get("content")
             prompt = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict))
         if e.get("type") == "assistant":
-            agents += sum(1 for c in msg.get("content") or [] if c.get("type") == "tool_use" and c.get("name") in ("Agent", "Task"))
+            used = [c.get("name") for c in msg.get("content") or [] if isinstance(c, dict) and c.get("type") == "tool_use"]
+            agents += sum(1 for n in used if n in ("Agent", "Task"))
+            tools.update(used)
             u, key = msg.get("usage"), (msg.get("id"), e.get("requestId"))
             if u and key not in seen:  # one model call is logged once per content block
                 seen.add(key)
@@ -74,8 +83,27 @@ def first_prompt_and_tools(f):
                 paused = bool(last and now and (now - last).total_seconds() >= 300)  # the shortest cache lifetime
                 rewrites += bool(ctx and paused and total > 20000 and write * 2 > total)  # whole context written again
                 ctx.append(total)
+                processed += total + (u.get("output_tokens") or 0)
+                written += u.get("output_tokens") or 0
                 last = now or last
-    return " ".join(prompt.split())[:70], agents, start, (ctx[0] if ctx else 0), max(ctx, default=0), rewrites
+    prompt = " ".join(prompt.split())
+    return (prompt[:70], agents, start, (ctx[0] if ctx else 0), max(ctx, default=0), rewrites,
+            mode(prompt, headless, tools), processed, written)
+
+
+REPLY_PROMPT_START = "You answer the chat of a running agent loop"  # loop-status.py --reply
+
+
+def mode(prompt, headless, tools):
+    if headless and prompt.startswith(REPLY_PROMPT_START) or tools & {"Monitor", "SendMessage"}:
+        return "steering a loop"
+    if headless:
+        return "fresh-loop round"
+    if "ScheduleWakeup" in tools or prompt.startswith("/loop"):
+        return "loop in session"
+    if "Workflow" in tools:
+        return "workflow"
+    return "conversation + subagents" if tools & {"Agent", "Task"} else "conversation"
 
 
 rows = []
@@ -83,12 +111,13 @@ for s in sessions:
     f = files.get(s["period"])
     if not f or args.project not in f.parent.name:
         continue
-    prompt, agents, start, ctx_start, ctx_peak, rewrites = first_prompt_and_tools(f)
+    prompt, agents, start, ctx_start, ctx_peak, rewrites, how, processed, written = first_prompt_and_tools(f)
     sub = f.with_suffix("") / "subagents"
     rows.append({"start": start[:16].replace("T", " "), "prompt": prompt, "id": s["period"][:8], "cost": s["totalCost"],
                  "tokens": s["totalTokens"], "models": "+".join(m.replace("claude-", "") for m in s["modelsUsed"]),
                  "agents": agents, "subagent_files": len(list(sub.glob("*.jsonl"))) if sub.exists() else 0,
-                 "ctx": f"{ctx_start // 1000}k>{ctx_peak // 1000}k", "rewrites": rewrites})
+                 "ctx": f"{ctx_start // 1000}k>{ctx_peak // 1000}k", "rewrites": rewrites,
+                 "mode": how, "processed": processed, "written": written})
 
 same = defaultdict(list)
 for r in rows:
@@ -111,3 +140,18 @@ print("\nper group")
 for name, (n, cost, agents) in sorted(groups.items(), key=lambda x: -x[1][1]):
     print(f"  {name:<56} {n:3d} sessions  US$ {cost:7.2f}  avg {cost / n:5.2f}  agent calls {agents}")
 print(f"  total US$ {sum(r['cost'] for r in rows):.2f} in {len(rows)} sessions")
+
+modes = defaultdict(lambda: {"sessions": 0, "cost": 0.0, "processed": 0, "written": 0})
+for r in rows:
+    m = modes[r["mode"]]
+    m["sessions"] += 1
+    m["cost"] += r["cost"]
+    m["processed"] += r["processed"]
+    m["written"] += r["written"]
+total = sum(r["cost"] for r in rows) or 1
+print("\nper work mode (processed/output = tokens read and written per token the model wrote)")
+for name, m in sorted(modes.items(), key=lambda x: -x[1]["cost"]):
+    ratio = m["processed"] / m["written"] if m["written"] else 0
+    print(f"  {name:<26} {m['sessions']:4d} sessions  US$ {m['cost']:8.2f}  {m['cost'] / total:4.0%}  processed/output {ratio:6.0f}")
+steer = modes["steering a loop"]["cost"] if "steering a loop" in modes else 0
+print(f"  steering share of the spend: {steer / total:.0%}")

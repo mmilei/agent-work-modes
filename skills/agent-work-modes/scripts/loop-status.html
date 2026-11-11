@@ -546,7 +546,16 @@ function bars() {
     pb('Rounds used', `${R.n} / ${R.cap || '?'}`, `<div class="track"><i style="width:${R.cap ? Math.min(R.n / R.cap, 1) * 100 : 0}%;background:${R.cap && R.n >= R.cap ? C.blocked : C.tag}"></i></div>`) +
     pb('Tries per item', `${its.reduce((a, i) => a + +i.tries, 0)} total · ${its.filter(i => +i.retries).length} retried`, `<div class="tries">${tries}</div>`) +
     pb('Tokens (usage lines)', F.tokens ? num(F.tokens) : 'none logged', `<div class="track">${tok.map(([u, t], i) => `<i title="${esc(u.t)} · ${num(t)} tokens · ${esc(u.text)}" style="width:${t / F.tokens * 100}%;background:${shade(i)}"></i>`).join('')}</div>`) +
-    pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'none logged',`<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`);
+    pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'none logged',`<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`) +
+    steer(sp ? sp.usd : F.usd || 0, pb);
+}
+// what answering the chat cost against the run; past STEER_MAX the steering costs more than it should
+const STEER_MAX = 0.2;
+function steer(run, pb) {
+  if (!F.steer_usd) return '';
+  const share = F.steer_usd / ((run + F.steer_usd) || 1), over = share > STEER_MAX;
+  return pb('Steering the loop (chat replies)', `<span style="color:${over ? C.blocked : 'inherit'}">$${num(F.steer_usd, 2)} · ${num(share * 100)}%${over ? ' · over ' + STEER_MAX * 100 + '%' : ''}</span>`,
+    `<div class="track"><i style="width:${Math.min(share, 1) * 100}%;background:${over ? C.blocked : C.tag}"></i></div>`);
 }
 
 function flowView() {

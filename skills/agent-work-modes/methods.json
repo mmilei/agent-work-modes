@@ -7,7 +7,7 @@
     {"id": "ontrack", "label": "Stays on track", "help": "How unlikely it is to drift off course without you noticing."},
     {"id": "understanding", "label": "Understanding", "help": "How much you understand of the result at the end."}
   ],
-  "scale": "0-3, higher is better on every axis. Ordinal judgement from the sources. Numbers under Low quota and Low re-read come from one run on sonnet (roman-numeral task, bench/README.md): one run, an anecdote, not a ranking.",
+  "scale": "0-3, higher is better on every axis. Ordinal judgement from the sources. Numbers under Low quota and Low re-read come from one run on sonnet (roman-numeral task, bench/README.md): one run, an anecdote, not a ranking. Two weeks of field data (why.md) back the order of loop and fresh and add the cost of steering a run.",
   "groups": {
     "pick": {"label": "Pick one per task", "help": "Each one answers 'how do I attack this?'. The stateful loop has two variants: whether each round re-reads the session or starts clean."},
     "addon": {"label": "Add to another", "help": "They do not attack the task on their own: they change where a form runs, who gives advice, or how work continues tomorrow."},
@@ -82,7 +82,7 @@
       "one": "The same session takes one item per round from a short state file, does it, verifies it and logs the evidence elsewhere.",
       "when": "A project of many items, each with a technical VERIFY, while you stay around.",
       "pro": "Moves item by item on its own; the state survives a /clear.",
-      "con": "Every round re-reads the whole session context: the form that burns the most quota.",
+      "con": "Every round re-reads the whole session context, so its cost grows with how long it runs: in two weeks of real loops the median in-session run processed 18 M tokens at a 257k peak context.",
       "diagram": {"n": [["st", 0, 0, "LOOP-STATE.md\n(short)", "file"], ["ag", 1, 0, "Agent\n(same session)", "agent"], ["v", 2, 0, "VERIFY", "det"], ["h", 2, 1, "LOOP-HISTORY.md", "file"], ["you", 3, 0, "Human check\n(last item)", "human"]],
                   "e": [["st", "ag", "next item"], ["ag", "v"], ["v", "h", "evidence"], ["v", "st", "one status line", "back"], ["v", "you", "all done"]]}
     },
@@ -92,7 +92,7 @@
       "one": "A script outside the agent relaunches it with the same prompt, a fresh session per round, state kept in files.",
       "when": "Hours with nobody around, with long waits that do not need the agent (builds, GPU jobs).",
       "pro": "Fresh session per round: no context re-read; stops on round cap, on no progress or on a STOP file.",
-      "con": "The script has to be written and tested; startup hooks are chosen by hand.",
+      "con": "The script has to be written and tested; startup hooks are chosen by hand. Steering it from a big session left watching took 41% of the loops' spend in field data: talk to it through the board's chat (--reply), one short session per message.",
       "diagram": {"cw": 245, "n": [["dr", 0, 0, "Loop script", "code"], ["s", 1, 0, "Fresh session\n(claude -p)", "agent"], ["f", 1, 1, "Plan + state files", "file"], ["c", 2, 0, "Check", "det"]],
                   "e": [["dr", "s", "same prompt"], ["s", "f", "read / write"], ["s", "c"], ["c", "dr", "next round - or stop: cap,\nno progress, STOP file", "back"]]}
     },

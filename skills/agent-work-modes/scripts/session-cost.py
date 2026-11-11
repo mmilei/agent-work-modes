@@ -1,6 +1,11 @@
 """What each session cost, grouped by the form that ran it: loop rounds, interactive sessions, subagents.
 
-    python session-cost.py [--since YYYYMMDD] [--project <text>] [--json <ccusage session --json output>]
+    python session-cost.py [--since YYYYMMDD] [--project <text>] [--json <ccusage session --json output>] [--out DIR]
+
+--out writes DIR/sessions.json, every KPI per session (mode, tokens by kind, cost, startup and peak context, cache
+rewrites, agent calls, project, start time), to keep for later reports, and DIR/usage.html, a self-contained page
+with the spend by work mode, day, hour and project and the most expensive sessions. No model call, no network beyond
+ccusage.
 
 Runs a pinned ccusage release through npx (or reads a saved output), joins every session with its transcript under
 ~/.claude/projects, and prints one row per session plus totals per group. Sessions whose first prompt is the same
@@ -29,6 +34,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--since", default=date.today().strftime("%Y%m%d"))
 ap.add_argument("--project", default="", help="only transcripts whose project folder contains this text")
 ap.add_argument("--json", help="saved output of `ccusage session --json`, instead of running it")
+ap.add_argument("--out", help="folder for sessions.json (every KPI per session) and usage.html (the report page)")
 args = ap.parse_args()
 try:
     if len(args.since) != 8 or not args.since.isascii() or not args.since.isdigit():
@@ -117,7 +123,10 @@ for s in sessions:
                  "tokens": s["totalTokens"], "models": "+".join(m.replace("claude-", "") for m in s["modelsUsed"]),
                  "agents": agents, "subagent_files": len(list(sub.glob("*.jsonl"))) if sub.exists() else 0,
                  "ctx": f"{ctx_start // 1000}k>{ctx_peak // 1000}k", "rewrites": rewrites,
-                 "mode": how, "processed": processed, "written": written})
+                 "mode": how, "processed": processed, "written": written, "project": f.parent.name,
+                 "session": s["period"], "ctx_start": ctx_start, "ctx_peak": ctx_peak, "utc": start,
+                 "input": s.get("inputTokens", 0), "output": s.get("outputTokens", 0),
+                 "cache_write": s.get("cacheCreationTokens", 0), "cache_read": s.get("cacheReadTokens", 0)})
 
 same = defaultdict(list)
 for r in rows:
@@ -155,3 +164,13 @@ for name, m in sorted(modes.items(), key=lambda x: -x[1]["cost"]):
     print(f"  {name:<26} {m['sessions']:4d} sessions  US$ {m['cost']:8.2f}  {m['cost'] / total:4.0%}  processed/output {ratio:6.0f}")
 steer = modes["steering a loop"]["cost"] if "steering a loop" in modes else 0
 print(f"  steering share of the spend: {steer / total:.0%}")
+
+if args.out:
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    data = json.dumps({"since": args.since, "project": args.project, "sessions": rows}, ensure_ascii=False)
+    (out / "sessions.json").write_text(data, encoding="utf-8")
+    page = (Path(__file__).with_name("usage-report.html").read_text(encoding="utf-8")
+            .replace("/*DATA*/null", data.replace("</", "<\\/")))
+    (out / "usage.html").write_text(page, encoding="utf-8")
+    print(f"\nwrote {out / 'sessions.json'} (every KPI per session) and {out / 'usage.html'}")

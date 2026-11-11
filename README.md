@@ -80,6 +80,7 @@ skills/agent-work-modes/
   scripts/fresh-loop.py the fresh-session loop: stops on blocked majority, pass, agreed cap, STOP file or no progress; --lean trims each round's startup context, --measure shows it
   scripts/test_fresh_loop.py hermetic regression checks for the blocked-majority guard and round cap
   scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted, startup/peak context and cache rewrites per session
+  scripts/usage-report.html the page session-cost.py --out fills: spend by work mode, day, hour, project
   scripts/test_session_cost.py offline checks for command arguments, dates and usage-tool failures
   scripts/lean.py       the --lean flags shared by fresh-loop.py and the board's replier
   scripts/loop-status.py the loop board: live flow, progress, session log, chat answered by a short Sonnet session per message (--reply; --snapshot: static copy)

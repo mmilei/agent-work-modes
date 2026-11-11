@@ -200,7 +200,10 @@ again and again (`why.md`). Keep it cheap:
   strong model for the decisions the run escalates.
 
 `python scripts/session-cost.py --since <YYYYMMDD>` shows each session's startup and peak context, and how many
-times it rewrote its cache after a pause, next to its cost.
+times it rewrote its cache after a pause, next to its cost, and the spend per work mode with the share that went to
+steering loops. `--out <folder>` keeps every KPI per session in `sessions.json` and writes `usage.html`, a page with
+the spend by mode, day, hour and project and the most expensive sessions, without calling a model. Keep that folder
+out of the repo: the first prompts of your sessions are in it.
 
 ## Loop status board
 

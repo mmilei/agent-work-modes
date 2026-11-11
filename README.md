@@ -85,6 +85,7 @@ skills/agent-work-modes/
   scripts/lean.py       the --lean flags shared by fresh-loop.py and the board's replier
   scripts/agent-graph.py live tree of every agent session (Claude, Codex, Hermes) by project: who launched and messaged whom, with time bars
   scripts/loop-status.py the loop board: live flow, progress, session log, chat answered by a short Sonnet session per message (--reply; --snapshot: static copy)
+  scripts/redact.py     scrubs a --snapshot folder (user paths, private terms) and fails if paths, terms or Spanish text remain
 docs/index.html         the rendered page
 docs/board/             static snapshot of the loop board that built this plugin
 ```

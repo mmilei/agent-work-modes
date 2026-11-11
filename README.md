@@ -83,6 +83,7 @@ skills/agent-work-modes/
   scripts/usage-report.html the page session-cost.py --out fills: spend by work mode, day, hour, project
   scripts/test_session_cost.py offline checks for command arguments, dates and usage-tool failures
   scripts/lean.py       the --lean flags shared by fresh-loop.py and the board's replier
+  scripts/agent-graph.py live graph of every agent session (Claude, Codex, Hermes): who launched and messaged whom, by band and time
   scripts/loop-status.py the loop board: live flow, progress, session log, chat answered by a short Sonnet session per message (--reply; --snapshot: static copy)
 docs/index.html         the rendered page
 docs/board/             static snapshot of the loop board that built this plugin

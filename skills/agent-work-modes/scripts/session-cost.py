@@ -30,33 +30,8 @@ from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--since", default=date.today().strftime("%Y%m%d"))
-ap.add_argument("--project", default="", help="only transcripts whose project folder contains this text")
-ap.add_argument("--json", help="saved output of `ccusage session --json`, instead of running it")
-ap.add_argument("--out", help="folder for sessions.json (every KPI per session) and usage.html (the report page)")
-args = ap.parse_args()
-try:
-    if len(args.since) != 8 or not args.since.isascii() or not args.since.isdigit():
-        raise ValueError
-    datetime.strptime(args.since, "%Y%m%d")
-except ValueError:
-    ap.error("--since must be a valid date in YYYYMMDD format")
-sys.stdout.reconfigure(encoding="utf-8")
+CCUSAGE = "ccusage@20.0.37"  # pinned release
 
-if args.json:
-    raw = Path(args.json).read_text(encoding="utf-8")
-else:
-    npx = shutil.which("npx")
-    if not npx:
-        sys.exit("session-cost: npx not found; install Node.js or use --json with saved ccusage output")
-    result = subprocess.run([npx, "-y", "ccusage@20.0.37", "session", "--json", "--since", args.since],
-                            capture_output=True, text=True, encoding="utf-8")
-    if result.returncode:
-        sys.exit(f"session-cost: ccusage failed: {result.stderr.strip()}")
-    raw = result.stdout
-sessions = json.loads(raw)["session"]
-files = {f.stem: f for f in (Path.home() / ".claude" / "projects").glob("*/*.jsonl")}
 
 
 def first_prompt_and_tools(f):
@@ -112,65 +87,98 @@ def mode(prompt, headless, tools):
     return "conversation + subagents" if tools & {"Agent", "Task"} else "conversation"
 
 
-rows = []
-for s in sessions:
-    f = files.get(s["period"])
-    if not f or args.project not in f.parent.name:
-        continue
-    prompt, agents, start, ctx_start, ctx_peak, rewrites, how, processed, written = first_prompt_and_tools(f)
-    sub = f.with_suffix("") / "subagents"
-    rows.append({"start": start[:16].replace("T", " "), "prompt": prompt, "id": s["period"][:8], "cost": s["totalCost"],
-                 "tokens": s["totalTokens"], "models": "+".join(m.replace("claude-", "") for m in s["modelsUsed"]),
-                 "agents": agents, "subagent_files": len(list(sub.glob("*.jsonl"))) if sub.exists() else 0,
-                 "ctx": f"{ctx_start // 1000}k>{ctx_peak // 1000}k", "rewrites": rewrites,
-                 "mode": how, "processed": processed, "written": written, "project": f.parent.name,
-                 "session": s["period"], "ctx_start": ctx_start, "ctx_peak": ctx_peak, "utc": start,
-                 "input": s.get("inputTokens", 0), "output": s.get("outputTokens", 0),
-                 "cache_write": s.get("cacheCreationTokens", 0), "cache_read": s.get("cacheReadTokens", 0)})
 
-same = defaultdict(list)
-for r in rows:
-    same[r["prompt"]].append(r)
-for r in rows:
-    r["group"] = f"loop: {r['prompt'][:45]}" if len(same[r["prompt"]]) > 1 and r["prompt"] else "interactive"
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--since", default=date.today().strftime("%Y%m%d"))
+    ap.add_argument("--project", default="", help="only transcripts whose project folder contains this text")
+    ap.add_argument("--json", help="saved output of `ccusage session --json`, instead of running it")
+    ap.add_argument("--out", help="folder for sessions.json (every KPI per session) and usage.html (the report page)")
+    args = ap.parse_args()
+    try:
+        if len(args.since) != 8 or not args.since.isascii() or not args.since.isdigit():
+            raise ValueError
+        datetime.strptime(args.since, "%Y%m%d")
+    except ValueError:
+        ap.error("--since must be a valid date in YYYYMMDD format")
+    sys.stdout.reconfigure(encoding="utf-8")
 
-rows.sort(key=lambda r: r["start"])
-for r in rows:
-    print(f"{r['start']} UTC  {r['id']}  {r['models']:<18} US$ {r['cost']:7.2f}  {r['tokens'] / 1e6:6.1f} M tok  "
-          f"ctx {r['ctx']:<10} rewrites {r['rewrites']}  agents {r['agents']} (files {r['subagent_files']})  "
-          f"{r['group'] if r['group'] != 'interactive' else 'interactive: ' + r['prompt'][:40]}")
-groups = defaultdict(lambda: [0, 0.0, 0])
-for r in rows:
-    g = groups[r["group"]]
-    g[0] += 1
-    g[1] += r["cost"]
-    g[2] += r["agents"]
-print("\nper group")
-for name, (n, cost, agents) in sorted(groups.items(), key=lambda x: -x[1][1]):
-    print(f"  {name:<56} {n:3d} sessions  US$ {cost:7.2f}  avg {cost / n:5.2f}  agent calls {agents}")
-print(f"  total US$ {sum(r['cost'] for r in rows):.2f} in {len(rows)} sessions")
+    if args.json:
+        raw = Path(args.json).read_text(encoding="utf-8")
+    else:
+        npx = shutil.which("npx")
+        if not npx:
+            sys.exit("session-cost: npx not found; install Node.js or use --json with saved ccusage output")
+        result = subprocess.run([npx, "-y", CCUSAGE, "session", "--json", "--since", args.since],
+                                capture_output=True, text=True, encoding="utf-8")
+        if result.returncode:
+            sys.exit(f"session-cost: ccusage failed: {result.stderr.strip()}")
+        raw = result.stdout
+    sessions = json.loads(raw)["session"]
+    files = {f.stem: f for f in (Path.home() / ".claude" / "projects").glob("*/*.jsonl")}
+    rows = []
+    for s in sessions:
+        f = files.get(s["period"])
+        if not f or args.project not in f.parent.name:
+            continue
+        prompt, agents, start, ctx_start, ctx_peak, rewrites, how, processed, written = first_prompt_and_tools(f)
+        sub = f.with_suffix("") / "subagents"
+        rows.append({"start": start[:16].replace("T", " "), "prompt": prompt, "id": s["period"][:8], "cost": s["totalCost"],
+                     "tokens": s["totalTokens"], "models": "+".join(m.replace("claude-", "") for m in s["modelsUsed"]),
+                     "agents": agents, "subagent_files": len(list(sub.glob("*.jsonl"))) if sub.exists() else 0,
+                     "ctx": f"{ctx_start // 1000}k>{ctx_peak // 1000}k", "rewrites": rewrites,
+                     "mode": how, "processed": processed, "written": written, "project": f.parent.name,
+                     "session": s["period"], "ctx_start": ctx_start, "ctx_peak": ctx_peak, "utc": start,
+                     "input": s.get("inputTokens", 0), "output": s.get("outputTokens", 0),
+                     "cache_write": s.get("cacheCreationTokens", 0), "cache_read": s.get("cacheReadTokens", 0)})
 
-modes = defaultdict(lambda: {"sessions": 0, "cost": 0.0, "processed": 0, "written": 0})
-for r in rows:
-    m = modes[r["mode"]]
-    m["sessions"] += 1
-    m["cost"] += r["cost"]
-    m["processed"] += r["processed"]
-    m["written"] += r["written"]
-total = sum(r["cost"] for r in rows) or 1
-print("\nper work mode (processed/output = tokens read and written per token the model wrote)")
-for name, m in sorted(modes.items(), key=lambda x: -x[1]["cost"]):
-    ratio = m["processed"] / m["written"] if m["written"] else 0
-    print(f"  {name:<26} {m['sessions']:4d} sessions  US$ {m['cost']:8.2f}  {m['cost'] / total:4.0%}  processed/output {ratio:6.0f}")
-steer = modes["steering a loop"]["cost"] if "steering a loop" in modes else 0
-print(f"  steering share of the spend: {steer / total:.0%}")
+    same = defaultdict(list)
+    for r in rows:
+        same[r["prompt"]].append(r)
+    for r in rows:
+        r["group"] = f"loop: {r['prompt'][:45]}" if len(same[r["prompt"]]) > 1 and r["prompt"] else "interactive"
 
-if args.out:
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    data = json.dumps({"since": args.since, "project": args.project, "sessions": rows}, ensure_ascii=False)
-    (out / "sessions.json").write_text(data, encoding="utf-8")
-    page = (Path(__file__).with_name("usage-report.html").read_text(encoding="utf-8")
-            .replace("/*DATA*/null", data.replace("</", "<\\/")))
-    (out / "usage.html").write_text(page, encoding="utf-8")
-    print(f"\nwrote {out / 'sessions.json'} (every KPI per session) and {out / 'usage.html'}")
+    rows.sort(key=lambda r: r["start"])
+    for r in rows:
+        print(f"{r['start']} UTC  {r['id']}  {r['models']:<18} US$ {r['cost']:7.2f}  {r['tokens'] / 1e6:6.1f} M tok  "
+              f"ctx {r['ctx']:<10} rewrites {r['rewrites']}  agents {r['agents']} (files {r['subagent_files']})  "
+              f"{r['group'] if r['group'] != 'interactive' else 'interactive: ' + r['prompt'][:40]}")
+    groups = defaultdict(lambda: [0, 0.0, 0])
+    for r in rows:
+        g = groups[r["group"]]
+        g[0] += 1
+        g[1] += r["cost"]
+        g[2] += r["agents"]
+    print("\nper group")
+    for name, (n, cost, agents) in sorted(groups.items(), key=lambda x: -x[1][1]):
+        print(f"  {name:<56} {n:3d} sessions  US$ {cost:7.2f}  avg {cost / n:5.2f}  agent calls {agents}")
+    print(f"  total US$ {sum(r['cost'] for r in rows):.2f} in {len(rows)} sessions")
+
+    modes = defaultdict(lambda: {"sessions": 0, "cost": 0.0, "processed": 0, "written": 0})
+    for r in rows:
+        m = modes[r["mode"]]
+        m["sessions"] += 1
+        m["cost"] += r["cost"]
+        m["processed"] += r["processed"]
+        m["written"] += r["written"]
+    total = sum(r["cost"] for r in rows) or 1
+    print("\nper work mode (processed/output = tokens read and written per token the model wrote)")
+    for name, m in sorted(modes.items(), key=lambda x: -x[1]["cost"]):
+        ratio = m["processed"] / m["written"] if m["written"] else 0
+        print(f"  {name:<26} {m['sessions']:4d} sessions  US$ {m['cost']:8.2f}  {m['cost'] / total:4.0%}  processed/output {ratio:6.0f}")
+    steer = modes["steering a loop"]["cost"] if "steering a loop" in modes else 0
+    print(f"  steering share of the spend: {steer / total:.0%}")
+
+    if args.out:
+        out = Path(args.out)
+        out.mkdir(parents=True, exist_ok=True)
+        data = json.dumps({"since": args.since, "project": args.project, "sessions": rows}, ensure_ascii=False)
+        (out / "sessions.json").write_text(data, encoding="utf-8")
+        page = (Path(__file__).with_name("usage-report.html").read_text(encoding="utf-8")
+                .replace("/*DATA*/null", data.replace("</", "<\\/")))
+        (out / "usage.html").write_text(page, encoding="utf-8")
+        print(f"\nwrote {out / 'sessions.json'} (every KPI per session) and {out / 'usage.html'}")
+
+
+if __name__ == "__main__":
+    main()

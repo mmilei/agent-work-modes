@@ -236,6 +236,12 @@ Windows, hidden and detached:
 `Start-Process python -ArgumentList 'scripts/loop-status.py','--loop-dir','loops/<x>','--port','8765','--reply' -WindowStyle Hidden`.
 To stop it, kill the `python` process whose command line contains `loop-status.py` and its port.
 
+To see every agent at once instead of one loop, `python scripts/agent-graph.py` serves
+http://127.0.0.1:8766/: one node per Claude Code, Codex and Hermes session on this machine, in bands (you, interactive
+sessions, loops and headless runs, subagents) along a time axis, with edges for launches and SendMessage messages and
+the numbers of a session on click. It re-reads only the files that changed and calls no model; `--no-cost` skips the
+background ccusage run that prices Claude sessions.
+
 | Flag | Default | Meaning |
 |---|---|---|
 | `--loop-dir` | cwd | The current loop's folder |

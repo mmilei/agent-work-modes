@@ -10,6 +10,8 @@ from unittest.mock import patch
 
 DRIVER = str(Path(__file__).with_name("fresh-loop.py"))
 LAST = []  # claude commands of the last run
+WRITTEN = {}  # files the driver wrote in the last run
+RESULT = '{"result": "done", "total_cost_usd": 0.5, "num_turns": 3, "duration_ms": 60000, '          '"usage": {"input_tokens": 10, "output_tokens": 90, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 99999}}'
 
 
 def state(*statuses):
@@ -17,24 +19,28 @@ def state(*statuses):
     return head + "".join(f"| {i} | item - VERIFY: check | - | {s} | 0 |\n" for i, s in enumerate(statuses, 1))
 
 
-def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0, flags=(), measured=""):
+def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0, flags=(), measured="", past=(), config=None):
     rounds, checks = [], []
 
     def command(cmd, **kwargs):
         if kwargs.get("shell"):
             checks.append(cmd)
             return subprocess.CompletedProcess(cmd, 0 if passes else 1)
-        if cmd[0] == "claude" and "--output-format" in cmd:  # --measure
+        if cmd[0] == "claude" and cmd[2] == "Reply only: ok":  # --measure
             rounds.append(cmd)
             return subprocess.CompletedProcess(cmd, session_code, stdout=measured, stderr="auth failed")
         if cmd[0] == "claude":
             rounds.append(cmd)
-            return subprocess.CompletedProcess(cmd, session_code)
+            return subprocess.CompletedProcess(cmd, session_code, stdout=RESULT, stderr="")
         if "--show-toplevel" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout="/x/parent/repo\n")
         return subprocess.CompletedProcess(cmd, 0, stdout=str(len(rounds)))
 
     def read(path, **kwargs):
+        if path.name == "loop-config.json":
+            return json.dumps(config) if config else "{}"
+        if path.name.startswith("result-"):
+            return WRITTEN.get(path.name, RESULT)
         if path.name == "LOOP-STATE.md":
             return after if rounds and after is not None else before
         return "Read LOOP-STATE.md, complete one item, update its status."
@@ -44,7 +50,10 @@ def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0
         argv += ["--rounds", cap]
     argv += list(flags)
     output = io.StringIO()
-    with patch.object(sys, "argv", argv), patch("subprocess.run", command), \
+    WRITTEN.clear()
+    write = lambda p, text, **kw: WRITTEN.__setitem__(p.name, text)
+    files = lambda p, pattern: [Path(f"result-{i}.json") for i in range(1, len(past) + 1)] +         [Path(n) for n in WRITTEN if n.startswith("result-")]
+    with patch.object(Path, "write_text", write), patch.object(Path, "unlink", lambda *a, **k: None),          patch.object(Path, "glob", files), patch.object(sys, "argv", argv), patch("subprocess.run", command), \
          patch.object(Path, "read_text", read), patch.object(Path, "exists", return_value=stop), \
          patch.object(Path, "is_file", lambda p: p.name == "CLAUDE.md" and p.parent.name == "parent"), \
          contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
@@ -79,7 +88,7 @@ assert code and rounds == 1 and checks == 0, "a failed session cannot be approve
 code, rounds, checks, output = run(state("todo", "todo"), state("done", "todo"), cap="1")
 assert code == 1 and rounds == 1 and "round cap" in output, "a completed pilot unit need not complete the global goal"
 run(state("todo"), cap="1", flags=["--", "--model", "sonnet"])
-assert LAST[0][3:] == ["--model", "sonnet"], "without --lean the session gets exactly the extra args"
+assert LAST[0][3:] == ["--output-format", "json", "--model", "sonnet"], "without --lean the session gets the json format and the extra args"
 run(state("todo"), cap="1", flags=["--lean", "--", "--model", "sonnet"])
 cmd = LAST[0]
 assert cmd[cmd.index("--tools") + 1] == "Bash,Read,Edit,Write,Glob,Grep,Monitor", "--lean restricts the tool list"
@@ -98,4 +107,27 @@ assert "--disable-slash-commands" in LAST[0], "--measure uses the same flags as 
 for bad in ("", "Login required", '{"is_error": true}', "[]"):
     code, _, checks, output = run(state("todo"), flags=["--measure"], measured=bad, session_code=1)
     assert code and code != 0 and checks == 0 and "--measure failed" in str(code), "a failed measure explains itself"
+
+# each claude round saves its JSON as result-<n>.json; other CLIs are not asked for JSON
+run(state("todo"), cap="2")
+assert WRITTEN.get("result-1.json") == RESULT and WRITTEN.get("result-2.json") == RESULT, "every round keeps its result JSON"
+code, rounds, checks, output = run(state("todo"), cap="1")
+assert "done" in output, "the round's text is still printed"
+run(state("todo"), cap="1", flags=["--cli", "codex exec"])
+assert not [k for k in WRITTEN if k.startswith("result-")], "only the claude CLI is asked for JSON"
+
+# limits: written at start, re-read each round, stop or warn
+run(state("todo"), cap="2", flags=["--model", "haiku", "--effort", "low", "--max-usd", "9"])
+assert json.loads(WRITTEN["loop-config.json"]) == {"rounds": 2, "max_tokens": 0, "max_usd": 9.0, "on_limit": "stop",
+                                                   "model": "haiku", "effort": "low"}, "config is written from the flags"
+assert LAST[0][-4:] == ["--model", "haiku", "--effort", "low"], "model and effort reach the round, after the extra args"
+code, rounds, _, output = run(state("todo"), cap="5", past=[1], flags=["--max-tokens", "200"])
+assert code == 1 and rounds == 0 and "limit reached" in output, "a spent token cap stops before the next round (cache reads excluded: 200 tokens)"
+code, rounds, _, output = run(state("todo"), cap="5", past=[1], flags=["--max-usd", "0.5"])
+assert code == 1 and rounds == 0 and "$0.50" in output, "a spent USD cap stops before the next round"
+code, rounds, _, output = run(state("todo"), cap="2", past=[1], passes=True, flags=["--max-usd", "0.5", "--on-limit", "warn"])
+assert code == 0 and rounds == 1 and "WARNING over limit" in output, "warn mode still runs the round and says so"
+code, rounds, _, _ = run(state("todo"), cap="1", config={"rounds": 3, "max_tokens": 0, "max_usd": 0, "on_limit": "stop",
+                                                          "model": "opus", "effort": ""})
+assert rounds == 3 and "opus" in LAST[0], "the live config wins over the flags"
 print("ok")

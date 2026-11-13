@@ -148,7 +148,7 @@ session, so prefer the fresh-session loop for long runs.
 1. Write `PROMPT.md` in the repo: read `LOOP-STATE.md`, take one item, do it, run its VERIFY, update the state file,
    log evidence to `LOOP-HISTORY.md`, then stop.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.
-3. Copy `scripts/fresh-loop.py` to the repo. Measure what each round loads before reading its prompt, and keep
+3. Copy `scripts/fresh-loop.py` and `scripts/lean.py` (it imports it) to the repo. Measure what each round loads before reading its prompt, and keep
    `--lean` unless the rounds need skills, MCP servers or a parent `CLAUDE.md` (add tools with `--tools`, e.g.
    `Agent` if rounds delegate):
    `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds 1 --lean --measure -- --permission-mode auto`.
@@ -164,7 +164,12 @@ session, so prefer the fresh-session loop for long runs.
    With another agent from `orchestration` (SKILL.md 1b), pass its headless command and its own flags, without
    `--lean` or `--measure`: `--cli "codex exec" -- -m <id>`, `--cli "gemini -p" -- -m <id>`. Check the flags with the
    CLI's `--help` first, and in particular how it allows edits and shell commands without asking.
-5. To see what the run cost, round by round and with any subagents:
+5. Launch the status board with `--reply` (below) and give the user its URL. That is the way to talk to the run: each
+   message gets a short Sonnet session that reads the state and answers, and ends. Then close the session that set
+   the loop up, with a handoff if anything is open. Do not keep it watching the inbox or relaunching rounds: a
+   resident orchestrator re-reads its whole context on every wake-up and in field data cost more than the rounds it
+   watched. Keep it only if the user asks for it after hearing that.
+6. To see what the run cost, round by round and with any subagents:
    `python scripts/session-cost.py --project <part of the repo folder name>`. On a subscription the amounts are
    ccusage's API-price estimate, not actual charges or a quota percentage. Prompt-based loop grouping is heuristic;
    use session IDs and the usage log to identify the actual run.
@@ -206,19 +211,26 @@ a chat to the orchestrator, and a history view across loops. It reads files and 
 the watching session nothing. Python standard library only, no external requests.
 
 Chat: each message from the page is appended as one JSON line (`ts`, `text`, `refs` = the node, selected text or
-page section the user attached) to `orchestrator-inbox.jsonl` in the loop folder. The orchestrator session watches it
-with Monitor (`tail -n 0 -f orchestrator-inbox.jsonl`) and answers by appending `{"ts": ..., "text": ...}` lines to
-`orchestrator-outbox.jsonl`; the page shows them within a few seconds. Only the page itself can post (same host,
-JSON only).
+page section the user attached) to `orchestrator-inbox.jsonl` in the loop folder; replies are `{"ts": ..., "text": ...}`
+lines in `orchestrator-outbox.jsonl`, shown within a few seconds. Only the page itself can post (same host, JSON only).
+
+With `--reply` the board answers by itself: one short headless session per message (`--reply-cli`, default
+`claude -p --model sonnet`, with the lean flags, in the loop folder) gets the message, its references, the last chat
+lines, `LOOP-STATE.md` and the tails of `LOOP-HISTORY.md` and `--log` inline, answers, and ends; messages are taken
+one at a time. It may edit `LOOP-STATE.md` (add, reword or unblock an item) and create `STOP`, which the next round
+reads, and nothing else. When a message needs judgement beyond the state, the reply starts with `ESCALATE:` and
+carries a short handoff; the page marks it, and the user opens a new session with a stronger model from it. The
+cost of each reply shows next to it. Without `--reply` nobody answers unless a session appends to the outbox, which
+is the expensive resident orchestrator `fresh` is meant to avoid.
 
 Launch it detached, so it outlives the session that started it (pick a free port):
 
 ```
-python scripts/loop-status.py --loop-dir loops/<x> --loops-glob "loops/*" --repo . --log <fresh-loop output file> --port 8765
+python scripts/loop-status.py --loop-dir loops/<x> --loops-glob "loops/*" --repo . --log <fresh-loop output file> --port 8765 --reply
 ```
 
 Windows, hidden and detached:
-`Start-Process python -ArgumentList 'scripts/loop-status.py','--loop-dir','loops/<x>','--port','8765' -WindowStyle Hidden`.
+`Start-Process python -ArgumentList 'scripts/loop-status.py','--loop-dir','loops/<x>','--port','8765','--reply' -WindowStyle Hidden`.
 To stop it, kill the `python` process whose command line contains `loop-status.py` and its port.
 
 | Flag | Default | Meaning |
@@ -231,6 +243,8 @@ To stop it, kill the `python` process whose command line contains `loop-status.p
 | `--log` | none | Output file of `fresh-loop.py`, for the round counter and per-round results |
 | `--port` | 8765 | Binds 127.0.0.1 only |
 | `--title` | repo or loop folder name | Page title |
+| `--reply` | off | Answer each chat message with a short headless session (above) |
+| `--reply-cli` | `claude -p --model sonnet` | Command for `--reply`; the prompt goes last. Lean flags, `acceptEdits` and JSON output are added only for `claude` |
 
 Every flag except `--loop-dir` is optional; a missing input renders as an empty card.
 

@@ -84,6 +84,50 @@ def test_flow_and_chat():
             srv.wait()
 
 
+FAKE_REPLIER = """import sys
+prompt = sys.argv[-1]
+seen = all(s in prompt for s in ("Why is #3 waiting?", '"id": "3"', "Ship it", "VERIFY: 3 passed"))
+print(("ESCALATE: decide the design. " if "decide" in prompt.split("## Message")[1].split("## Chat")[0] else "") + f"saw everything: {seen}")
+"""
+
+
+def test_reply():
+    """--reply answers each message from a short session that gets the message, refs, state and history inline."""
+    with tempfile.TemporaryDirectory() as d:
+        loop = Path(d)
+        (loop / "LOOP-STATE.md").write_text(STATE, encoding="utf-8")
+        (loop / "LOOP-HISTORY.md").write_text("### 2026-11-10 01:46 - item 1: parser\nVERIFY: 3 passed.\n", encoding="utf-8")
+        (loop / "fake.py").write_text(FAKE_REPLIER, encoding="utf-8")
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        cli = f'"{Path(sys.executable).as_posix()}" "{(loop / "fake.py").as_posix()}"'
+        srv = subprocess.Popen([sys.executable, SCRIPT, "--loop-dir", d, "--port", str(port), "--reply", "--reply-cli", cli],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _ in range(100):
+                try:
+                    socket.create_connection(("127.0.0.1", port), timeout=1).close()
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            js = {"Content-Type": "application/json"}
+            for text in ("Why is #3 waiting?", "Should we decide to split item 3?"):
+                msg = {"text": text, "refs": [{"type": "node", "id": "3"}]}
+                assert call(port, "/chat", json.dumps(msg).encode(), js)[0] == 200
+            for _ in range(100):
+                bot = [m for m in json.loads(call(port, "/chat")[1]) if m["from"] == "orchestrator"]
+                if len(bot) == 2:
+                    break
+                time.sleep(0.1)
+            assert [m["text"] for m in bot] == ["saw everything: True", "ESCALATE: decide the design. saw everything: True"], "the 2nd sees the 1st via the chat"
+            assert [m["escalate"] for m in bot] == [False, True], "only a reply starting with ESCALATE: is escalated"
+        finally:
+            srv.terminate()
+            srv.wait()
+
+
 if __name__ == "__main__":
     test_flow_and_chat()
+    test_reply()
     print("ok")

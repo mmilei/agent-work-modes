@@ -155,7 +155,7 @@ footer{color:var(--faint);font-size:12px;margin-top:40px}
 .msgs{max-height:360px;min-height:80px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .msg{border:1px solid var(--line2);background:var(--bg2);border-radius:10px;padding:7px 10px;max-width:92%}
 .msg.user{align-self:flex-end}.msg.orchestrator{border-color:#9be15d66}
-.msg .mh{font:500 10.5px var(--mono);color:var(--faint)}.msg.orchestrator .mh{color:var(--accent)}
+.msg .mh{font:500 10.5px var(--mono);color:var(--faint)}.msg.orchestrator .mh{color:var(--accent)}.msg.esc{border-color:var(--blocked)}.msg.esc .mh{color:var(--blocked)}
 .msg .mt{white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0 4px}
 .refs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;min-height:20px}
 .refs button{all:unset;cursor:pointer;margin-left:4px;color:var(--chalk)}
@@ -626,7 +626,7 @@ async function loadChat() {
   let M; try { M = await (await fetch(SRC.c, {cache:'no-store'})).json(); } catch (e) { return; }
   if (M.length === chatN) return; chatN = M.length;
   const box = $('#msgs');
-  box.innerHTML = M.map(m => `<div class="msg ${m.from === 'user' ? 'user' : 'orchestrator'}"><div class="mh">${m.from === 'user' ? 'you' : 'orchestrator'} · ${esc(m.ts.replace('T', ' ').slice(0, 19))}</div>
+  box.innerHTML = M.map(m => `<div class="msg ${m.from === 'user' ? 'user' : 'orchestrator'}${m.escalate ? ' esc' : ''}"><div class="mh">${m.from === 'user' ? 'you' : 'orchestrator'} · ${esc(m.ts.replace('T', ' ').slice(0, 19))}${m.usd != null ? ` · $${Number(m.usd).toFixed(3)}` : ''}${m.escalate ? ' · needs a stronger model: open a new session with this handoff' : ''}</div>
     <div class="mt">${esc(m.text)}</div>${m.refs.length ? `<div class="chips">${m.refs.map(r => `<span class="chip">${esc(refLabel(r))}</span>`).join('')}</div>` : ''}</div>`).join('')
     || '<p class="note">No messages yet. Replies from the orchestrator show up here.</p>';
   box.scrollTop = box.scrollHeight;

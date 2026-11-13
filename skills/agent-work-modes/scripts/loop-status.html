@@ -180,6 +180,11 @@ footer{color:var(--faint);font-size:12px;margin-top:40px}
   </section>
 
   <section>
+    <h2>Limits <small>fresh-loop.py re-reads them before every round</small></h2>
+    <div class="panel" id="limits"></div>
+  </section>
+
+  <section>
     <h2>Flow <small>one node per item, laid out by Depends · click a node for its VERIFY and evidence</small></h2>
     <div class="lfg">
       <div class="panel flowwrap" id="lfw"></div>
@@ -530,7 +535,7 @@ async function loadFlow() {
   try { F = await (await fetch(SRC.f, {cache:'no-store'})).json(); } catch (e) { $('#now').textContent = 'offline'; return; }
   FB = Object.fromEntries(F.items.map(i => [i.id, i]));
   $('#lname').textContent = `${F.loop} · ${F.now}`;
-  bars(); flowView(); slog();
+  bars(); limits(); flowView(); slog();
 }
 
 function bars() {
@@ -548,6 +553,31 @@ function bars() {
     pb('Tokens (usage lines)', F.tokens ? num(F.tokens) : 'none logged', `<div class="track">${tok.map(([u, t], i) => `<i title="${esc(u.t)} · ${num(t)} tokens · ${esc(u.text)}" style="width:${t / F.tokens * 100}%;background:${shade(i)}"></i>`).join('')}</div>`) +
     pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'none logged',`<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`) +
     steer(sp ? sp.usd : F.usd || 0, pb);
+}
+// caps from loop-config.json against what result-*.json says was spent; 0 = no cap. Skipped while an input has focus
+// so the 15 s refresh never eats what is being typed.
+function limits() {
+  const el = $('#limits'), L = F.limits, sp = F.spend || {tokens: 0, usd: 0};
+  if (el.contains(document.activeElement) && document.activeElement.tagName !== 'BODY') return;
+  if (!L) { el.innerHTML = '<span class="note">no loop-config.json yet: fresh-loop.py writes it when it starts</span>'; return; }
+  const ro = window.SNAPSHOT ? ' disabled' : '';
+  const over = {rounds: F.round.n >= L.rounds, max_tokens: L.max_tokens && sp.tokens >= L.max_tokens, max_usd: L.max_usd && sp.usd >= L.max_usd};
+  const f = (k, label, used, step) => `<label class="pb"><div class="l">${label}<b style="color:${over[k] ? C.blocked : 'inherit'}">${used}${over[k] ? ' · over' : ''}</b></div>
+    <input data-k="${k}" type="number" min="${k === 'rounds' ? 1 : 0}" step="${step}" value="${L[k]}"${ro}></label>`;
+  const t = (k, label) => `<label class="pb"><div class="l">${label}</div><input data-k="${k}" type="text" value="${esc(L[k] || '')}" placeholder="default"${ro}></label>`;
+  el.innerHTML = `<div class="bars">${f('rounds', 'Rounds', F.round.n + ' used', 1)}${f('max_tokens', 'Max tokens (0 = none)', num(sp.tokens) + ' used', 1000)}${f('max_usd', 'Max USD (0 = none)', '$' + num(sp.usd, 2) + ' used', 0.5)}
+    ${t('model', 'Model')}${t('effort', 'Effort')}
+    <label class="pb"><div class="l">At a cap</div><select data-k="on_limit"${ro}><option value="stop">stop the loop</option><option value="warn">only warn (red)</option></select></label></div>
+    ${window.SNAPSHOT ? '' : '<button id="limsave">Save limits</button> <span class="note" id="limmsg"></span>'}`;
+  el.querySelector('select').value = L.on_limit;
+  const btn = $('#limsave');
+  if (btn) btn.onclick = async () => {
+    const body = {};
+    el.querySelectorAll('[data-k]').forEach(i => body[i.dataset.k] = i.type === 'number' ? +i.value : i.value.trim());
+    let r; try { r = await fetch('/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); } catch (e) { r = {ok: false}; }
+    $('#limmsg').textContent = r.ok ? 'saved: the next round uses it' : 'not saved: ' + ((r.json && (await r.json()).error) || 'offline');
+    if (r.ok) { document.activeElement.blur(); loadFlow(); }
+  };
 }
 // what answering the chat cost against the run; past STEER_MAX the steering costs more than it should
 const STEER_MAX = 0.2;

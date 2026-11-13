@@ -20,6 +20,10 @@ Without --reply, whoever orchestrates appends to the outbox by hand.
 --snapshot DIR writes the page and its data (flow.json, history.json, chat.json) as static files into DIR and exits,
 without live processes or transcripts: a read-only board that GitHub Pages can serve.
 
+Limits: <loop-dir>/loop-config.json (written by fresh-loop.py, re-read by it before every round) holds rounds,
+max_tokens, max_usd, on_limit ("stop" or "warn"), model and effort. The page shows them against what result-*.json
+says was spent, in red when over, and POST /config {...} changes any of them (same origin check as the chat).
+
 Every input except --loop-dir is optional; a missing one renders as an empty card, never as an error.
 --loop-dir holds LOOP-STATE.md (item table), LOOP-HISTORY.md (one `### YYYY-MM-DD HH:MM - item N: ...` entry per
 closed item) and result*.json (claude -p JSON output, for the spend card).
@@ -388,7 +392,7 @@ def loop_events(loop):
 
 
 def result_spend(d):
-    sp = {"usd": 0.0, "turns": 0, "min": 0.0, "cache_read": 0, "out": 0, "items": []}
+    sp = {"usd": 0.0, "turns": 0, "min": 0.0, "cache_read": 0, "out": 0, "tokens": 0, "items": []}
     for f in sorted(d.glob("result*.json")):
         try:
             r = json.loads(f.read_text(encoding="utf-8"))
@@ -402,6 +406,7 @@ def result_spend(d):
             sp[k] += row[k]
         sp["cache_read"] += u.get("cache_read_input_tokens", 0)
         sp["out"] += u.get("output_tokens", 0)
+        sp["tokens"] += u.get("input_tokens", 0) + u.get("output_tokens", 0) + u.get("cache_creation_input_tokens", 0)
     return sp if sp["items"] else None
 
 
@@ -587,7 +592,8 @@ def flow_data():
     log, usage_txt = read(Path(args.log)) if args.log else "", read(LOOP / "LOOP-USAGE.md")
     rounds = re.findall(r"fresh-loop: round (\d+)/(\d+)", log)
     usage = re.findall(r"^- \[(\d\d:\d\d)\] (.*)$", usage_txt, re.M)
-    cap = rounds[-1][1] if rounds else (re.findall(r"\bcap (\d+)", read(LOOP / "LOOP-STATE.md") + usage_txt) or [0])[0]
+    cap = (loop_config() or {}).get("rounds") or (rounds[-1][1] if rounds else
+                                                  (re.findall(r"\bcap (\d+)", read(LOOP / "LOOP-STATE.md") + usage_txt) or [0])[0])
     day = (re.findall(r"\d{4}-\d\d-\d\d", usage_txt) or [datetime.now().strftime("%Y-%m-%d")])[0]
     stream = [{"t": f"{day}T{hm}", "kind": "usage", "text": line} for hm, line in usage]
     stream += [{"t": e["t"].strftime(FMT), "kind": "round", "text": f"item {e['id']}: {e['name']}"} for e in ev]
@@ -605,12 +611,52 @@ def flow_data():
            "session": tr[0].stem[:8] if tr else "",
            "last": datetime.fromtimestamp(tr[0].stat().st_mtime).strftime("%H:%M:%S") if tr else ""}
     return {"title": TITLE, "loop": LOOP.name, "now": datetime.now().strftime("%H:%M:%S"), "items": its,
-            "current": current, "round": rnd, "spend": result_spend(LOOP),
+            "current": current, "round": rnd, "spend": result_spend(LOOP), "limits": loop_config(),
             "tokens": sum(int(x.replace(",", "")) for _, line in usage for x in re.findall(r"(\d[\d,]*) ?tok", line)),
             "usd": sum(float(x.replace(",", "")) for _, line in usage for x in re.findall(r"\$(\d[\d,]*(?:\.\d+)?)", line)),
             "usage": [{"t": hm, "text": line} for hm, line in usage],
             "log": sorted(stream, key=lambda e: e["t"], reverse=True)[:80],
             "steer_usd": sum(m["usd"] for m in chat_messages() if isinstance(m["usd"], (int, float)))}
+
+
+CONFIG = "loop-config.json"
+CONFIG_FIELDS = {"rounds": (int, 1), "max_tokens": (int, 0), "max_usd": ((int, float), 0)}
+
+
+def loop_config():
+    try:
+        cfg = json.loads(read(LOOP / CONFIG))
+    except ValueError:
+        return None
+    return cfg if isinstance(cfg, dict) else None
+
+
+def set_config(raw):
+    """Validate a partial config from the page and merge it into loop-config.json atomically; raises ValueError."""
+    new = json.loads(raw)
+    if not isinstance(new, dict) or not new:
+        raise ValueError("expected a non-empty object")
+    clean = {}
+    for k, v in new.items():
+        if k in CONFIG_FIELDS:
+            typ, low = CONFIG_FIELDS[k]
+            if isinstance(v, bool) or not isinstance(v, typ) or v < low:
+                raise ValueError(f"{k}: expected a number >= {low}")
+        elif k == "on_limit":
+            if v not in ("stop", "warn"):
+                raise ValueError("on_limit: expected stop or warn")
+        elif k in ("model", "effort"):
+            if not (isinstance(v, str) and re.fullmatch(r"[\w.\[\]-]{0,40}", v)):
+                raise ValueError(f"{k}: expected a short model or effort name")
+        else:
+            raise ValueError(f"unknown field {k}")
+        clean[k] = v
+    with CHAT_LOCK:
+        cfg = {**(loop_config() or {}), **clean}
+        tmp = LOOP / (CONFIG + ".tmp")
+        tmp.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        os.replace(tmp, LOOP / CONFIG)  # the driver never sees a half-written file
+    return cfg
 
 
 def chat_messages():
@@ -718,11 +764,12 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        if self.path != "/chat":
+        if self.path not in ("/chat", "/config"):
             return self.send_error(404)
         mine = {f"127.0.0.1:{args.port}", f"localhost:{args.port}"}
         origin = self.headers.get("Origin")
-        # the inbox feeds an agent: only this page may write to it (no other site, no DNS rebinding, no form posts)
+        # the inbox feeds an agent and the config steers the driver: only this page may write (no other site,
+        # no DNS rebinding, no form posts)
         if (self.headers.get("Host") not in mine or (origin and origin.split("://", 1)[-1] not in mine)
                 or not self.headers.get("Content-Type", "").startswith("application/json")):
             return self.send_error(403)
@@ -730,7 +777,7 @@ class H(BaseHTTPRequestHandler):
         if n > 65536:
             return self.send_error(413)
         try:
-            rec = add_chat(self.rfile.read(n))
+            rec = (add_chat if self.path == "/chat" else set_config)(self.rfile.read(n))
         except (ValueError, UnicodeDecodeError) as e:
             return self.send(400, json.dumps({"error": str(e)}).encode())
         self.send(200, json.dumps(rec, ensure_ascii=False).encode("utf-8"))

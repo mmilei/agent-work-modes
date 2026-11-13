@@ -13,6 +13,15 @@ On Windows the check runs through cmd.exe.
 before the extra arguments (default `claude -p`; e.g. `codex exec`, `gemini -p`, `opencode run`). --lean and
 --measure only apply to `claude`.
 
+Every round of the claude CLI runs with --output-format json and its result is saved as result-<n>.json in the current
+folder (cost, turns, duration, usage), which the status board reads for its spend card; its text is still printed.
+
+Limits live in loop-config.json (current folder), written at start from the flags and re-read before every round, so
+the status board (or a hand edit) can change them while the loop runs; a restart rewrites it from the flags: {"rounds", "max_tokens", "max_usd", "on_limit",
+"model", "effort"}. Tokens are input + output + cache-creation tokens summed over result-*.json (cache reads excluded).
+At a cap, on_limit "stop" ends the loop and "warn" prints a warning and keeps going. model and effort are passed to
+claude as --model and --effort for the next round (after the extra args, so they win).
+
 --lean trims what every round loads before reading the prompt (measured 51k -> 17k tokens on a real repo): only the
 tools a round needs (--tools, default Bash,Read,Edit,Write,Glob,Grep,Monitor; add Agent if rounds delegate), no
 skills, no MCP servers, and no CLAUDE.md from folders above the repo root (above the current folder outside a repo).
@@ -34,6 +43,11 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--prompt", required=True, help="file with the prompt sent every round")
 ap.add_argument("--check", required=True, help="command that exits 0 when the work is done")
 ap.add_argument("--rounds", type=int, required=True, help="round cap agreed at kickoff")
+ap.add_argument("--max-tokens", type=int, default=0, help="token cap over all rounds (0 = none)")
+ap.add_argument("--max-usd", type=float, default=0, help="spend cap in USD over all rounds (0 = none)")
+ap.add_argument("--on-limit", choices=("stop", "warn"), default="stop", help="at a cap: stop the loop or only warn")
+ap.add_argument("--model", default="", help="model for each round (claude CLI; editable live in loop-config.json)")
+ap.add_argument("--effort", default="", help="effort for each round (claude CLI; editable live in loop-config.json)")
 ap.add_argument("--stall", type=int, default=3, help="rounds without repo changes before stopping")
 ap.add_argument("--lean", action="store_true", help="load only what a round needs (see above)")
 ap.add_argument("--tools", default="Bash,Read,Edit,Write,Glob,Grep,Monitor", help="tool list for --lean")
@@ -82,23 +96,91 @@ def check_blocked():
         sys.exit(f"fresh-loop: {blocked}/{len(states)} items BLOCKED; returning to the user")
 
 
+CONFIG = Path("loop-config.json")
+IGNORED = re.compile(r"result-\d+\.json$|loop-config\.json$")  # driver bookkeeping is not repo progress
+
+
+def load_config():
+    cfg = {"rounds": args.rounds, "max_tokens": args.max_tokens, "max_usd": args.max_usd,
+           "on_limit": args.on_limit, "model": args.model, "effort": args.effort}
+    try:
+        cfg.update(json.loads(CONFIG.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        pass
+    return cfg
+
+
+def spent():
+    tokens, usd = 0, 0.0
+    for f in Path(".").glob("result-*.json"):
+        try:
+            r = json.loads(f.read_text(encoding="utf-8"))
+            u = r["usage"]
+            tokens += u["input_tokens"] + u["output_tokens"] + u.get("cache_creation_input_tokens", 0)
+            usd += r["total_cost_usd"]
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return tokens, usd
+
+
+def over_limit(cfg, n):
+    tokens, usd = spent()
+    hits = [text for hit, text in ((cfg["max_tokens"] and tokens >= cfg["max_tokens"], f"{tokens:,} tokens >= {cfg['max_tokens']:,}"),
+                                   (cfg["max_usd"] and usd >= cfg["max_usd"], f"${usd:.2f} >= ${cfg['max_usd']:.2f}"),
+                                   (n > cfg["rounds"], f"round cap ({cfg['rounds']}) reached")) if hit]
+    return "; ".join(hits)
+
+
 def repo_state():
     run = lambda *a: subprocess.run(["git", *a], capture_output=True, text=True).stdout
-    return run("rev-parse", "HEAD") + run("status", "--porcelain") + run("diff")
+    status = "".join(l + "\n" for l in run("status", "--porcelain").splitlines() if not IGNORED.search(l))
+    return run("rev-parse", "HEAD") + status + run("diff")
 
 
 def check_passes():
     return subprocess.run(args.check, shell=True).returncode == 0
 
 
+def round_flags(cfg):
+    if cli[0] != "claude":
+        return []
+    return [*(["--model", cfg["model"]] if cfg["model"] else []), *(["--effort", cfg["effort"]] if cfg["effort"] else [])]
+
+
+def run_round(prompt, cfg):
+    if cli[0] != "claude":
+        return subprocess.run([*cli, prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
+    result = subprocess.run([*cli, prompt, "--output-format", "json", *extra, *round_flags(cfg)],
+                            stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if result.stdout.strip():
+        k = sum(1 for _ in Path(".").glob("result-*.json")) + 1
+        Path(f"result-{k}.json").write_text(result.stdout, encoding="utf-8")
+        try:
+            print(json.loads(result.stdout).get("result", ""), flush=True)
+        except (ValueError, AttributeError):
+            print(result.stdout, flush=True)
+    if result.stderr.strip():
+        print(result.stderr, file=sys.stderr, flush=True)
+    return result
+
+
 prompt = Path(args.prompt).read_text(encoding="utf-8")
+CONFIG.unlink(missing_ok=True)  # a restart starts from its own flags, not from a stale file
+CONFIG.write_text(json.dumps(load_config(), indent=2), encoding="utf-8")
 stalled, last = 0, repo_state()
-for n in range(1, args.rounds + 1):
+n = 0
+while True:
+    n += 1
+    cfg = load_config()
     if Path("STOP").exists():
         sys.exit(print("fresh-loop: STOP file found") or 0)
     check_blocked()
-    print(f"fresh-loop: round {n}/{args.rounds}", flush=True)
-    result = subprocess.run([*cli, prompt, *extra], stdin=subprocess.DEVNULL)  # else -p waits for stdin
+    limit = over_limit(cfg, n)
+    if limit and cfg["on_limit"] == "stop":
+        print(f"fresh-loop: limit reached ({limit}), stopping")
+        sys.exit(1)
+    print(f"fresh-loop: round {n}/{cfg['rounds']}" + (f" WARNING over limit: {limit}" if limit else ""), flush=True)
+    result = run_round(prompt, cfg)
     if result.returncode:
         sys.exit(f"fresh-loop: session failed with exit code {result.returncode}; inspect its evidence before continuing")
     check_blocked()
@@ -109,5 +191,3 @@ for n in range(1, args.rounds + 1):
     last = now
     if stalled >= args.stall:
         sys.exit(print(f"fresh-loop: no repo changes in {stalled} rounds, stopping") or 1)
-print(f"fresh-loop: round cap ({args.rounds}) reached without the check passing")
-sys.exit(1)

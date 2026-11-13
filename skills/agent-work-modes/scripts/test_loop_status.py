@@ -92,6 +92,45 @@ print(("ESCALATE: decide the design. " if "decide" in prompt.split("## Message")
 """
 
 
+def test_config():
+    with tempfile.TemporaryDirectory() as d:
+        loop = Path(d)
+        (loop / "LOOP-STATE.md").write_text(STATE, encoding="utf-8")
+        (loop / "loop-config.json").write_text(json.dumps({"rounds": 4, "max_tokens": 0, "max_usd": 0, "on_limit": "stop",
+                                                           "model": "", "effort": ""}), encoding="utf-8")
+        (loop / "result-1.json").write_text(json.dumps({"total_cost_usd": 0.5, "num_turns": 2, "duration_ms": 1000, "usage": {
+            "input_tokens": 10, "output_tokens": 90, "cache_creation_input_tokens": 100, "cache_read_input_tokens": 5000}}),
+            encoding="utf-8")
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        srv = subprocess.Popen([sys.executable, SCRIPT, "--loop-dir", d, "--port", str(port)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _ in range(100):
+                try:
+                    socket.create_connection(("127.0.0.1", port), timeout=1).close()
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            flow = json.loads(call(port, "/flow.json")[1])
+            assert flow["limits"]["rounds"] == 4 and flow["round"]["cap"] == 4, "the board shows the driver's config"
+            assert flow["spend"]["tokens"] == 200, "tokens are input + output + cache creation, no cache reads"
+            js = {"Content-Type": "application/json"}
+            assert call(port, "/config", json.dumps({"max_usd": 2, "on_limit": "warn", "model": "haiku"}).encode(), js)[0] == 200
+            cfg = json.loads((loop / "loop-config.json").read_text(encoding="utf-8"))
+            assert cfg["max_usd"] == 2 and cfg["on_limit"] == "warn" and cfg["model"] == "haiku" and cfg["rounds"] == 4,                 "a partial change is merged into the file"
+            for bad in ({"rounds": 0}, {"max_usd": "9"}, {"max_tokens": True}, {"on_limit": "maybe"}, {"model": "a b; rm"},
+                        {"bogus": 1}, {}, []):
+                assert call(port, "/config", json.dumps(bad).encode(), js)[0] == 400, f"rejects {bad}"
+            assert call(port, "/config", b"{}", {"Content-Type": "text/plain"})[0] == 403, "forms cannot post"
+            assert call(port, "/config", json.dumps({"rounds": 9}).encode(), {**js, "Origin": "http://evil.example"})[0] == 403
+            assert json.loads((loop / "loop-config.json").read_text(encoding="utf-8"))["rounds"] == 4, "rejected edits change nothing"
+        finally:
+            srv.terminate()
+            srv.wait()
+
+
 def test_reply():
     """--reply answers each message from a short session that gets the message, refs, state and history inline."""
     with tempfile.TemporaryDirectory() as d:
@@ -130,5 +169,6 @@ def test_reply():
 
 if __name__ == "__main__":
     test_flow_and_chat()
+    test_config()
     test_reply()
     print("ok")

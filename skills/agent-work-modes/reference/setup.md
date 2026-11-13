@@ -118,6 +118,10 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
 - **Dispatch.** Launch the loop only on a verbal OK from the user. Claude starts it; the user does not paste a
   launch block. Include in that OK whether a successful first unit permits unattended continuation within the
   unchanged scope and remaining cap, or whether the user wants to review it first.
+- **Cleanup.** Note the starting branch in `LOOP-STATE.md`. When an item closes and when the run ends: return to the
+  starting branch, `git worktree remove` every worktree the loop created, and delete branches already merged into
+  the base (`git branch --merged <base>`). Never delete an unmerged branch: list it in `LOOP-HISTORY.md` and ask.
+  A loop that leaves a worktree, a stale branch or the repo on another branch has not closed.
 - **Usage log.** Before round 1, note the start time and session id in `LOOP-USAGE.md`. After each subagent, append its
   available usage and elapsed time, with their source; mark missing measurements as unknown. API-price estimates
   are not subscription-quota percentages. Commit the work in the project's own repo, never in the orchestrator's repo.
@@ -146,7 +150,8 @@ session, so prefer the fresh-session loop for long runs.
 
 0. Agree the kickoff items above first.
 1. Write `PROMPT.md` in the repo: read `LOOP-STATE.md`, take one item, do it, run its VERIFY, update the state file,
-   log evidence to `LOOP-HISTORY.md`, then stop.
+   log evidence to `LOOP-HISTORY.md`, then clean up (return to the starting branch, remove any worktree it created,
+   delete merged branches; the Cleanup rule above) and stop.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.
 3. Copy `scripts/fresh-loop.py` and `scripts/lean.py` (it imports it) to the repo. Measure what each round loads before reading its prompt, and keep
    `--lean` unless the rounds need skills, MCP servers or a parent `CLAUDE.md` (add tools with `--tools`, e.g.

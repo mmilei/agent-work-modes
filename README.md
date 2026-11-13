@@ -85,6 +85,7 @@ skills/agent-work-modes/
   scripts/lean.py       the --lean flags shared by fresh-loop.py and the board's replier
   scripts/agent-graph.py live tree of every agent session (Claude, Codex, Hermes) by project: who launched and messaged whom, with time bars
   scripts/loop-status.py the loop board: live flow, progress, session log, chat answered by a short Sonnet session per message (--reply; --snapshot: static copy)
+  scripts/redact.py     scrubs a --snapshot folder (user paths, private terms) and fails if paths, terms or Spanish text remain
 docs/index.html         the rendered page
 docs/board/             static snapshot of the loop board that built this plugin
 ```
@@ -99,35 +100,35 @@ recommended); `evals/triggers.json` holds phrases that must and must not fire th
 `python evals/run.py --triggers`; failures stay listed.
 
 <!-- evals:start -->
-Run 2026-11-10, model claude-sonnet-5-5
+Run 2026-11-11, model claude-sonnet-5-5
 
 | kind | case | result | detail |
 |---|---|---|---|
-| scenario | four-small-fixes-with-checks | pass | candidates=['conversation', 'goal', 'stophook'] recommended=conversation |
-| scenario | no-check-design-decision | pass | candidates=['conversation', 'subagents'] recommended=conversation |
+| scenario | four-small-fixes-with-checks | pass | candidates=['conversation', 'goal'] recommended=conversation |
+| scenario | no-check-design-decision | pass | candidates=['conversation', 'advisor'] recommended=conversation |
 | scenario | leaving-without-check | pass | candidates=['conversation', 'subagents'] recommended=conversation |
 | scenario | several-small-changes-direct | pass | candidates=['conversation', 'subagents'] recommended=conversation |
-| scenario | one-sitting-feature-with-tests | pass | candidates=['goal', 'conversation', 'stophook'] recommended=goal |
+| scenario | one-sitting-feature-with-tests | pass | candidates=['conversation', 'stophook', 'goal'] recommended=stophook |
 | scenario | same-done-command-repo | pass | candidates=['stophook', 'goal', 'conversation'] recommended=stophook |
 | scenario | continues-tomorrow-with-tests | pass | candidates=['goal', 'handoff', 'conversation'] recommended=goal |
 | scenario | continues-tomorrow-no-check | pass | candidates=['conversation', 'handoff'] recommended=conversation |
-| scenario | many-items-user-stays | pass | candidates=['loop', 'goal', 'fresh'] recommended=loop |
-| scenario | overnight-long-builds | pass | candidates=['fresh', 'stophook', 'goal'] recommended=fresh |
-| scenario | gpu-experiments-unattended | pass | candidates=['fresh', 'goal', 'loop'] recommended=fresh |
+| scenario | many-items-user-stays | pass | candidates=['loop', 'fresh', 'workflow'] recommended=fresh |
+| scenario | overnight-long-builds | pass | candidates=['fresh', 'loop'] recommended=fresh |
+| scenario | gpu-experiments-unattended | pass | candidates=['fresh', 'loop', 'handoff'] recommended=fresh |
 | scenario | parallel-tasks-while-away | pass | candidates=['agentview', 'subagents', 'goal'] recommended=agentview |
 | scenario | explicit-independent-review | pass | candidates=['subagents', 'conversation'] recommended=subagents |
-| scenario | context-isolation-investigation | pass | candidates=['conversation', 'subagents', 'workflow'] recommended=subagents |
+| scenario | context-isolation-investigation | pass | candidates=['subagents', 'conversation', 'workflow'] recommended=subagents |
 | scenario | wide-audit-repeated | pass | candidates=['workflow', 'subagents', 'fresh'] recommended=workflow |
-| scenario | periodic-github-task | pass | candidates=['routine', 'fresh', 'conversation'] recommended=routine |
-| scenario | hard-in-spots-serial | pass | candidates=['advisor', 'goal', 'stophook'] recommended=advisor |
+| scenario | periodic-github-task | pass | candidates=['routine', 'loop', 'conversation'] recommended=routine |
+| scenario | hard-in-spots-serial | pass | candidates=['advisor', 'goal', 'loop'] recommended=advisor |
 | scenario | next-sessions-start-better | pass | candidates=['inbox', 'handoff', 'conversation'] recommended=inbox |
 | scenario | vague-outcome | pass | candidates=['conversation', 'subagents'] recommended=conversation |
 | trigger | How should we work this? | pass | skill fired=True |
 | trigger | Which work mode fits this migration? | pass | skill fired=True |
 | trigger | Goal or workflow for this refactor? | pass | skill fired=True |
 | trigger | Should this be a loop? | pass | skill fired=True |
-| trigger | Subagents or not for these fixes? | FAIL | skill fired=False |
-| trigger | Run this in the background while I am out. | FAIL | skill fired=False |
+| trigger | Subagents or not for these fixes? | pass | skill fired=True |
+| trigger | Run this in the background while I am out. | pass | skill fired=True |
 | trigger | Leave it running overnight. | pass | skill fired=True |
 | trigger | This continues tomorrow, how do we set it up? | pass | skill fired=True |
 | trigger | What is the best way to have the agent tackle these 40 tickets? | pass | skill fired=True |
@@ -143,7 +144,7 @@ Run 2026-11-10, model claude-sonnet-5-5
 | no_trigger | Translate this README to Spanish. | pass | skill fired=False |
 | no_trigger | Add a loop that retries the HTTP call three times. | pass | skill fired=False |
 
-37/39 passed
+39/39 passed
 <!-- evals:end -->
 
 ## Lessons behind it

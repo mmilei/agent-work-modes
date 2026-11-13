@@ -101,6 +101,22 @@ itself, the output, was 15%. Three things drove it:
 
 The amounts are API-price estimates: how each kind of token weighs on a subscription's quota is not published.
 
+### Field data: two weeks, three agents (2026-10-27 to 11-10)
+
+1,415 M tokens processed across 515 sessions. Measure in **tokens processed per output token** (input + cache writes +
+cache reads + output, divided by output): it shows how much context each step drags along, independent of price.
+
+- **95% cache re-read is normal.** Each step re-sends the whole context and writes 1-2k: a 100-step session growing
+  from 50k to 200k re-reads ~12.5 M and writes ~150k. A low share would mean a lost cache, which costs more. The lever
+  is the volume (context size times steps), not the percentage.
+- **Steering is the expensive part of a loop.** Sessions that watched or directed loops took 41% of the loops'
+  spend and processed ~270 tokens per output token, against ~117 for the rounds they directed. The board's chat with
+  `--reply` answers with one short session per message instead (about US$ 0.03 a reply).
+- **In-session loops cost by duration, fresh loops by startup.** Median in-session run: 18 M tokens, 257k peak
+  context. Median fresh round: 223k.
+
+`python scripts/session-cost.py --since <YYYYMMDD>` prints these per work mode for your own sessions.
+
 ## Model and effort
 
 Source: [Which Claude model should you build with?](https://claude.dev/blog/which-claude-model-should-you-build-with/) (claude.dev, 2026-11-09).

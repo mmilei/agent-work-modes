@@ -609,7 +609,8 @@ def flow_data():
             "tokens": sum(int(x.replace(",", "")) for _, line in usage for x in re.findall(r"(\d[\d,]*) ?tok", line)),
             "usd": sum(float(x.replace(",", "")) for _, line in usage for x in re.findall(r"\$(\d[\d,]*(?:\.\d+)?)", line)),
             "usage": [{"t": hm, "text": line} for hm, line in usage],
-            "log": sorted(stream, key=lambda e: e["t"], reverse=True)[:80]}
+            "log": sorted(stream, key=lambda e: e["t"], reverse=True)[:80],
+            "steer_usd": sum(m["usd"] for m in chat_messages() if isinstance(m["usd"], (int, float)))}
 
 
 def chat_messages():

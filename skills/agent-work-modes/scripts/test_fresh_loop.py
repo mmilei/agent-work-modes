@@ -52,7 +52,8 @@ def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0
     output = io.StringIO()
     WRITTEN.clear()
     write = lambda p, text, **kw: WRITTEN.__setitem__(p.name, text)
-    files = lambda p, pattern: [Path(f"result-{i}.json") for i in range(1, len(past) + 1)] +         [Path(n) for n in WRITTEN if n.startswith("result-")]
+    files = lambda p, pattern: [Path(f"result-{i}.json") for i in past] + \
+        [Path(n) for n in WRITTEN if n.startswith("result-")]
     with patch.object(Path, "write_text", write), patch.object(Path, "unlink", lambda *a, **k: None),          patch.object(Path, "glob", files), patch.object(sys, "argv", argv), patch("subprocess.run", command), \
          patch.object(Path, "read_text", read), patch.object(Path, "exists", return_value=stop), \
          patch.object(Path, "is_file", lambda p: p.name == "CLAUDE.md" and p.parent.name == "parent"), \
@@ -111,6 +112,8 @@ for bad in ("", "Login required", '{"is_error": true}', "[]"):
 # each claude round saves its JSON as result-<n>.json; other CLIs are not asked for JSON
 run(state("todo"), cap="2")
 assert WRITTEN.get("result-1.json") == RESULT and WRITTEN.get("result-2.json") == RESULT, "every round keeps its result JSON"
+run(state("todo"), cap="1", past=[2])
+assert WRITTEN.get("result-3.json") == RESULT and "result-2.json" not in WRITTEN, "numbering uses max existing result index + 1"
 code, rounds, checks, output = run(state("todo"), cap="1")
 assert "done" in output, "the round's text is still printed"
 run(state("todo"), cap="1", flags=["--cli", "codex exec"])

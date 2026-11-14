@@ -3,9 +3,8 @@
     python session-cost.py [--since YYYYMMDD] [--project <text>] [--json <ccusage session --json output>] [--out DIR]
 
 --out writes DIR/sessions.json, every KPI per session (mode, tokens by kind, cost, startup and peak context, cache
-rewrites, agent calls, project, start time), to keep for later reports, and DIR/usage.html, a self-contained page
-with the spend by work mode, day, hour and project and the most expensive sessions. No model call, no network beyond
-ccusage.
+rewrites, agent calls, project, start time), to keep for later reports. No model call, no network beyond ccusage.
+The live Usage & Spend dashboard lives in loop-status.py.
 
 Runs a pinned ccusage release through npx (or reads a saved output), joins every session with its transcript under
 ~/.claude/projects, and prints one row per session plus totals per group. Sessions whose first prompt is the same
@@ -46,9 +45,13 @@ def first_prompt_and_tools(f):
         start = start or e.get("timestamp", "")
         headless = headless or e.get("entrypoint") == "sdk-cli"
         msg = e.get("message") or {}
-        if e.get("type") == "user" and not prompt:
+        if e.get("type") == "user" and not prompt and not e.get("isMeta") and not e.get("toolUseResult") \
+                and not e.get("isCompactSummary"):
             c = msg.get("content")
-            prompt = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict))
+            words = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict))
+            words = " ".join(words.split())
+            if words and not words.startswith("<"):
+                prompt = words
         if e.get("type") == "assistant":
             used = [c.get("name") for c in msg.get("content") or [] if isinstance(c, dict) and c.get("type") == "tool_use"]
             agents += sum(1 for n in used if n in ("Agent", "Task"))
@@ -93,7 +96,7 @@ def main():
     ap.add_argument("--since", default=date.today().strftime("%Y%m%d"))
     ap.add_argument("--project", default="", help="only transcripts whose project folder contains this text")
     ap.add_argument("--json", help="saved output of `ccusage session --json`, instead of running it")
-    ap.add_argument("--out", help="folder for sessions.json (every KPI per session) and usage.html (the report page)")
+    ap.add_argument("--out", help="folder for sessions.json (every KPI per session)")
     args = ap.parse_args()
     try:
         if len(args.since) != 8 or not args.since.isascii() or not args.since.isdigit():
@@ -174,10 +177,7 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
         data = json.dumps({"since": args.since, "project": args.project, "sessions": rows}, ensure_ascii=False)
         (out / "sessions.json").write_text(data, encoding="utf-8")
-        page = (Path(__file__).with_name("usage-report.html").read_text(encoding="utf-8")
-                .replace("/*DATA*/null", data.replace("</", "<\\/")))
-        (out / "usage.html").write_text(page, encoding="utf-8")
-        print(f"\nwrote {out / 'sessions.json'} (every KPI per session) and {out / 'usage.html'}")
+        print(f"\nwrote {out / 'sessions.json'} (every KPI per session)")
 
 
 if __name__ == "__main__":

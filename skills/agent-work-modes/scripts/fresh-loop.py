@@ -153,7 +153,8 @@ def run_round(prompt, cfg):
     result = subprocess.run([*cli, prompt, "--output-format", "json", *extra, *round_flags(cfg)],
                             stdin=subprocess.DEVNULL, capture_output=True, text=True)
     if result.stdout.strip():
-        k = sum(1 for _ in Path(".").glob("result-*.json")) + 1
+        k = max((int(m.group(1)) for f in Path(".").glob("result-*.json")
+                 if (m := re.search(r"result-(\d+)\.json$", f.name))), default=0) + 1
         Path(f"result-{k}.json").write_text(result.stdout, encoding="utf-8")
         try:
             print(json.loads(result.stdout).get("result", ""), flush=True)

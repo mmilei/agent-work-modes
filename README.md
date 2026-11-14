@@ -19,12 +19,12 @@ notice afterwards.
 
 - **[The catalog](https://mmilei.github.io/agent-work-modes/)**: one diagram per form, a decision tree, a map of
   autonomy against quota, and a six-axis profile.
-- **[A loop board](https://mmilei.github.io/agent-work-modes/board/)**: the live board the skill sets up for a loop,
-  frozen at the end of the run that built this plugin (25 items, the flow by dependencies, progress, session log and
-  the chat with the orchestrator). Local paths and private names were removed; the chat is rebuilt from two decisions
-  taken during that run. On a real loop it refreshes itself and, with `--reply`, each chat message is answered by a
-  short Sonnet session that reads the loop's state and ends, instead of a big session left watching
-  (`scripts/loop-status.py`, `--snapshot` makes a static copy like this one).
+- **[A loop board](https://mmilei.github.io/agent-work-modes/board/)**: the unified operational board the skill sets
+  up, frozen at the end of the run that built this plugin (25 items, flow by dependencies, progress, session log,
+  orchestrator chat, plus the session graph and usage & spend tabs). Local paths and private names were removed; the
+  chat is rebuilt from two decisions taken during that run. On a live run it serves `Loop & History`, `Sessions & Graph`
+  (Claude, Codex, Hermes), and `Usage & Spend` on `:8765`, refreshes itself, and with `--reply` answers each chat
+  message with a short Sonnet session (`scripts/loop-status.py`, `--snapshot` makes a static copy like this one).
 
 ## Two layers
 
@@ -79,12 +79,11 @@ skills/agent-work-modes/
   scripts/test_stop_gate.py  hermetic test of the gate (python scripts/test_stop_gate.py)
   scripts/fresh-loop.py the fresh-session loop: stops on blocked majority, pass, agreed cap, STOP file or no progress; --lean trims each round's startup context, --measure shows it
   scripts/test_fresh_loop.py hermetic regression checks for the blocked-majority guard and round cap
-  scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted, startup/peak context and cache rewrites per session
-  scripts/usage-report.html the page session-cost.py --out fills: spend by work mode, day, hour, project
+  scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted, startup/peak context and cache rewrites per session (`--out` writes `sessions.json`)
   scripts/test_session_cost.py offline checks for command arguments, dates and usage-tool failures
   scripts/lean.py       the --lean flags shared by fresh-loop.py and the board's replier
-  scripts/agent-graph.py live tree of every agent session (Claude, Codex, Hermes) by project: who launched and messaged whom, with time bars
-  scripts/loop-status.py the loop board: live flow, progress, session log, chat answered by a short Sonnet session per message (--reply; --snapshot: static copy)
+  scripts/loop-status.py the unified operational board on `:8765`: Loop & History, Sessions & Graph (Claude, Codex, Hermes), and Usage & Spend (`--reply`, `--snapshot`, `--no-cost`)
+  scripts/test_loop_status.py live board, session graph, loop isolation, and chat checks
   scripts/redact.py     scrubs a --snapshot folder (user paths, private terms) and fails if paths, terms or Spanish text remain
 docs/index.html         the rendered page
 docs/board/             static snapshot of the loop board that built this plugin

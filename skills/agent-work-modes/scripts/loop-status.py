@@ -148,7 +148,7 @@ def git(*a, cwd=None):
     if cwd is None:
         return ""
     try:
-        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
+        return subprocess.run(["git", "-c", f"safe.directory={Path(cwd).resolve().as_posix()}", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8",
                               errors="replace").stdout
     except OSError:
         return ""
@@ -323,7 +323,7 @@ def flow_data():
         what, _, verify = it["name"].partition("VERIFY:")
         it["what"], it["verify"] = what.strip(), verify.strip()
         it["title"] = short_title(it["what"])
-        it["retries"] = max(int(it["tries"]) - (it["kind"] == "done"), 0)  # a pass costs one try, the rest failed
+        it["retries"] = max(int(it["tries"]) - 1, 0)  # the first attempt is never a retry
         it["ev"] = [{"t": e["t"].strftime(FMT), "kind": e["kind"], "title": e["name"], "body": e["body"]}
                     for e in ev if e["id"] == it["id"]]
     log, usage_txt = read(Path(args.log)) if args.log else "", read(LOOP / "LOOP-USAGE.md")
@@ -340,7 +340,8 @@ def flow_data():
             stream.append({"t": datetime.fromisoformat(t).astimezone().strftime(FMT), "kind": "commit", "text": f"{h} {s}"})
         except ValueError:
             continue
-    ps, tr = (None, None) if args.snapshot else (procs(), transcript())
+    execution = native_execution()
+    ps, tr = (None, None) if args.snapshot or execution else (procs(), transcript())
     rnd = {"n": int(rounds[-1][0]) if rounds else len(usage), "cap": int(cap), "item": current,
            "driver": None if ps is None else any(p["role"] == "loop" for p in ps),
            "live": None if ps is None else any(p["role"] != "loop" for p in ps),
@@ -348,7 +349,8 @@ def flow_data():
            "session": tr[0].stem[:8] if tr else "",
            "last": datetime.fromtimestamp(tr[0].stat().st_mtime).strftime("%H:%M:%S") if tr else ""}
     return {"title": TITLE, "loop": LOOP.name, "now": datetime.now().strftime("%H:%M:%S"), "items": its,
-            "current": current, "round": rnd, "spend": result_spend(LOOP), "limits": loop_config(),
+            "current": current, "round": rnd, "execution": execution, "spend": result_spend(LOOP),
+            "limits": None if execution else loop_config(),
             "tokens": sum(int(x.replace(",", "")) for _, line in usage for x in re.findall(r"(\d[\d,]*) ?tok", line)),
             "usd": sum(float(x.replace(",", "")) for _, line in usage for x in re.findall(r"\$(\d[\d,]*(?:\.\d+)?)", line)),
             "usage": [{"t": hm, "text": line} for hm, line in usage],
@@ -366,6 +368,12 @@ def loop_config():
     except ValueError:
         return None
     return cfg if isinstance(cfg, dict) else None
+
+
+def native_execution():
+    """An explicitly reported native run, not an inferred process heartbeat."""
+    value = (loop_config() or {}).get("execution")
+    return value if isinstance(value, dict) and value.get("mode") == "native" else None
 
 
 def set_config(raw):
@@ -611,8 +619,10 @@ def codex_file(f):
             d["start"] = d["start"] or t
             d["end"] = t
         if e.get("type") == "session_meta":
-            d.update(id=p.get("id", ""), parent=p.get("parent_thread_id") or "", cwd=p.get("cwd", ""),
-                     source=p.get("thread_source") or "")
+            source = p.get("source")
+            spawn = ((source.get("subagent") or {}).get("thread_spawn") or {}) if isinstance(source, dict) else {}
+            d.update(id=p.get("id", ""), parent=p.get("parent_thread_id") or spawn.get("parent_thread_id") or "",
+                     cwd=p.get("cwd", ""), source=spawn.get("agent_path") or p.get("thread_source") or "")
         elif e.get("type") == "turn_context" and p.get("model"):
             d["models"].add(p["model"])
         elif p.get("type") == "task_started":
@@ -792,6 +802,18 @@ def build(hours=24, project=""):
             costs = [COSTS.get(i) for i in ids if COSTS.get(i) is not None]
             n["cost"] = sum(costs) if costs else None
 
+    # Bind the declared root and observed descendants; a workspace cwd need not match the game title.
+    execution = native_execution()
+    if execution and isinstance(execution.get("session"), str) and execution["session"]:
+        bound = {"x:" + execution["session"]}
+        while True:
+            children = {n["id"] for n in nodes.values() if n.get("parent") in bound}
+            if children <= bound:
+                break
+            bound |= children
+        for nid in bound & nodes.keys():
+            nodes[nid]["project"] = TITLE
+
     all_projects = sorted({clean_project(n.get("project", "")) for n in nodes.values()
                            if n.get("project") and n.get("provider") != "unknown"})
     if project:
@@ -830,7 +852,7 @@ def snapshot_graph(flow, hist, chat):
     """Build a redacted-safe graph.json payload from a loop snapshot without touching host transcripts."""
     proj = flow.get("title") or hist.get("title") or TITLE
     evs = [e for l in hist.get("loops", []) for e in l.get("ev", [])]
-    if not evs:
+    if not evs or flow.get("execution"):
         now = time.time()
         return {"now": now, "since": now - 24 * 3600, "hours": 24, "default_project": proj,
                 "projects": [proj] if proj else [], "nodes": [
@@ -1010,11 +1032,12 @@ def snapshot(out):
         flow = json.loads((out / "flow.json").read_text(encoding="utf-8"))
         hist = json.loads((out / "history.json").read_text(encoding="utf-8"))
         chat = json.loads((out / "chat.json").read_text(encoding="utf-8")) if (out / "chat.json").exists() else []
-        payloads = (("graph.json", snapshot_graph(flow, hist, chat)),)
     else:
         flow, hist, chat = flow_data(), history_data(), chat_messages()
-        payloads = (("flow.json", flow), ("history.json", hist), ("chat.json", chat),
-                    ("graph.json", snapshot_graph(flow, hist, chat)))
+    if flow.get("execution"):
+        flow["execution"] = {k: v for k, v in flow["execution"].items() if k != "session"}
+    payloads = (("flow.json", flow), ("history.json", hist), ("chat.json", chat),
+                ("graph.json", snapshot_graph(flow, hist, chat)))
     for name, data in payloads:
         (out / name).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     page_html = HIST_HTML.read_text(encoding="utf-8").replace("<script>", "<script>window.SNAPSHOT = true;", 1)

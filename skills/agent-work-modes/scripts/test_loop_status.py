@@ -71,7 +71,7 @@ def test_flow_and_chat():
             f = json.loads(body)
             assert code == 200 and [i["kind"] for i in f["items"]] == ["done", "now", "waiting", "gate"], f["items"]
             by = {i["id"]: i for i in f["items"]}
-            assert by["2"]["retries"] == 1 and by["1"]["retries"] == 0, "a pass costs one try; extra tries are retries"
+            assert by["2"]["retries"] == 0 and by["1"]["retries"] == 0, "the first in-progress attempt is not a failed attempt"
             assert by["3"]["waits"] == ["2"] and by["1"]["verify"] == "tests pass" and by["1"]["ev"], "waits, VERIFY, evidence"
             assert f["round"]["cap"] == 15 and f["round"]["n"] == 1 and f["tokens"] == 1200 and f["usd"] == 0.4, f["round"]
             assert any(e["kind"] == "usage" and e["t"] == "2026-11-10T01:46" for e in f["log"]), "usage lines are timestamped"
@@ -281,7 +281,58 @@ def test_items_three_columns():
         assert current == "2"
 
 
+def test_native_execution():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        m.LOOP, m.TITLE = root, "Example game"
+        m.CLAUDE, m.CODEX, m.HERMES = root / "claude", root / "codex", []
+        m.CODEX.mkdir()
+        (root / "LOOP-STATE.md").write_text(STATE.replace("| todo | 0 |", "| todo | 2 |"), encoding="utf-8")
+        execution = {"mode": "native", "harness": "Codex", "provider": "OpenAI", "session": "root",
+                     "status": "running", "stage": "Baseline", "updated_at": "2026-01-01T00:00:00Z"}
+        (root / "loop-config.json").write_text(json.dumps({"execution": execution}), encoding="utf-8")
+        def unexpected():
+            raise AssertionError("native orchestration must not inspect external loop processes")
+        m.procs = unexpected
+        flow = m.flow_data()
+        assert flow["execution"] == execution and flow["limits"] is None
+        assert flow["round"]["driver"] is None and flow["round"]["live"] is None
+        assert flow["spend"] is None
+        by = {i["id"]: i for i in flow["items"]}
+        assert by["2"]["retries"] == 0 and by["3"]["retries"] == 1
+        for sid, parent in (("root", ""), ("child", "root"), ("grandchild", "child"), ("unrelated", "")):
+            event = {"type": "session_meta", "timestamp": datetime.now(timezone.utc).isoformat(),
+                     "payload": {"id": sid, "parent_thread_id": parent, "cwd": "/workspace/studio"}}
+            if sid == "child":
+                event["payload"].pop("parent_thread_id")
+                event["payload"]["source"] = {"subagent": {"thread_spawn": {
+                    "parent_thread_id": parent, "agent_path": "/root/writer"}}}
+            (m.CODEX / (sid + ".jsonl")).write_text(json.dumps(event) + "\n", encoding="utf-8")
+        graph = m.build()
+        nodes = {n["id"]: n for n in graph["nodes"]}
+        assert all(nodes["x:" + sid]["project"] == m.TITLE for sid in ("root", "child", "grandchild"))
+        assert nodes["x:unrelated"]["project"] == "studio"
+        assert nodes["x:child"]["label"] == "/root/writer"
+        assert all(nodes["x:" + sid]["cost"] is None for sid in ("root", "child", "grandchild"))
+        assert len(nodes) == 5, "only observed sessions plus human; never planned workers"
+        hist = {"loops": [{"ev": [{"t": "2026-01-01T00:00", "id": "1", "title": "Baseline"}]}]}
+        snap = m.snapshot_graph(flow, hist, [])
+        assert [n["id"] for n in snap["nodes"]] == ["you"], "native snapshots never synthesize CLI agents or spend"
+        out = root / "snapshot"
+        m.snapshot(out)
+        exported = json.loads((out / "flow.json").read_text(encoding="utf-8"))
+        assert "session" not in exported["execution"] and exported["execution"]["harness"] == "Codex"
+        assert m.native_execution()["session"] == "root", "export does not change local metadata"
+        m.LOOP = root / "missing"
+        exported["execution"]["session"] = "old-private-id"
+        (out / "flow.json").write_text(json.dumps(exported), encoding="utf-8")
+        m.snapshot(out)
+        assert "old-private-id" not in (out / "flow.json").read_text(encoding="utf-8"), "refresh strips old snapshot IDs"
+
+
 if __name__ == "__main__":
+    test_native_execution()
     test_flow_and_chat()
     test_config()
     test_reply()

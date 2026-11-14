@@ -240,6 +240,31 @@ carries a short handoff; the page marks it, and the user opens a new session wit
 cost of each reply shows next to it. Without `--reply` nobody answers unless a session appends to the outbox, which
 is the expensive resident orchestrator `fresh` is meant to avoid.
 
+### Native orchestration
+
+When the current harness orchestrates its own agents, no external loop process is expected. Reuse the board with
+`--no-cost` and without `--reply`, `--log`, or `--transcripts` unless those sources are actually part of the run.
+Add the loop folder's `loop-config.json` path to the repo's `.gitignore` before writing session metadata.
+Then merge this into that config (never publish session IDs or transcripts):
+
+```json
+{"execution": {
+  "mode": "native", "harness": "Codex", "provider": "OpenAI",
+  "session": "<actual orchestrator session ID>", "status": "running",
+  "stage": "Baseline verification", "updated_at": "<actual ISO timestamp>",
+  "detail": "Sequential writers; independent read-only reviewer"
+}}
+```
+
+The orchestrator maintains `status`, `stage`, and `updated_at` when they change, including completion, pause, or
+failure. These are dated reports, not process heartbeats. Planned workers belong in `detail`, not fake sessions.
+`session` binds the real root and observed descendants from the existing Codex transcript reader to the board's
+project title, even when the workspace cwd differs from the game's repo. No session is fabricated if telemetry is
+unavailable. Native static snapshots omit host sessions rather than synthesizing a graph from history. Verify all three tabs against actual runtime evidence before presenting the board. Costs that cannot
+be priced remain unknown; `--no-cost` does not mean zero spend or quota. Native limits stay with the orchestrator.
+
+### Starting the board
+
 Launch it detached, so it outlives the session that started it (pick a free port):
 
 ```

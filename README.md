@@ -19,12 +19,12 @@ notice afterwards.
 
 - **[The catalog](https://mmilei.github.io/agent-work-modes/)**: one diagram per form, a decision tree, a map of
   autonomy against quota, and a six-axis profile.
-- **[A loop board](https://mmilei.github.io/agent-work-modes/board/)**: the live board the skill sets up for a loop,
-  frozen at the end of the run that built this plugin (25 items, the flow by dependencies, progress, session log and
-  the chat with the orchestrator). Local paths and private names were removed; the chat is rebuilt from two decisions
-  taken during that run. On a real loop it refreshes itself and, with `--reply`, each chat message is answered by a
-  short Sonnet session that reads the loop's state and ends, instead of a big session left watching
-  (`scripts/loop-status.py`, `--snapshot` makes a static copy like this one).
+- **[A loop board](https://mmilei.github.io/agent-work-modes/board/)**: the unified operational board the skill sets
+  up, frozen at the end of the run that built this plugin (25 items, flow by dependencies, progress, session log,
+  orchestrator chat, plus the session graph and usage & spend tabs). Local paths and private names were removed; the
+  chat is rebuilt from two decisions taken during that run. On a live run it serves `Loop & History`, `Sessions & Graph`
+  (Claude, Codex, Hermes), and `Usage & Spend` on `:8765`, refreshes itself, and with `--reply` answers each chat
+  message with a short Sonnet session (`scripts/loop-status.py`, `--snapshot` makes a static copy like this one).
 
 ## Two layers
 
@@ -79,10 +79,12 @@ skills/agent-work-modes/
   scripts/test_stop_gate.py  hermetic test of the gate (python scripts/test_stop_gate.py)
   scripts/fresh-loop.py the fresh-session loop: stops on blocked majority, pass, agreed cap, STOP file or no progress; --lean trims each round's startup context, --measure shows it
   scripts/test_fresh_loop.py hermetic regression checks for the blocked-majority guard and round cap
-  scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted, startup/peak context and cache rewrites per session
+  scripts/session-cost.py what each session cost (ccusage + transcripts): loop rounds grouped, subagents counted, startup/peak context and cache rewrites per session (`--out` writes `sessions.json`)
   scripts/test_session_cost.py offline checks for command arguments, dates and usage-tool failures
   scripts/lean.py       the --lean flags shared by fresh-loop.py and the board's replier
-  scripts/loop-status.py the loop board: live flow, progress, session log, chat answered by a short Sonnet session per message (--reply; --snapshot: static copy)
+  scripts/loop-status.py the unified operational board on `:8765`: Loop & History, Sessions & Graph (Claude, Codex, Hermes), and Usage & Spend (`--reply`, `--snapshot`, `--no-cost`)
+  scripts/test_loop_status.py live board, session graph, loop isolation, and chat checks
+  scripts/redact.py     scrubs a --snapshot folder (user paths, private terms) and fails if paths, terms or Spanish text remain
 docs/index.html         the rendered page
 docs/board/             static snapshot of the loop board that built this plugin
 ```
@@ -97,35 +99,35 @@ recommended); `evals/triggers.json` holds phrases that must and must not fire th
 `python evals/run.py --triggers`; failures stay listed.
 
 <!-- evals:start -->
-Run 2026-11-10, model claude-sonnet-5-5
+Run 2026-11-11, model claude-sonnet-5-5
 
 | kind | case | result | detail |
 |---|---|---|---|
-| scenario | four-small-fixes-with-checks | pass | candidates=['conversation', 'goal', 'stophook'] recommended=conversation |
-| scenario | no-check-design-decision | pass | candidates=['conversation', 'subagents'] recommended=conversation |
+| scenario | four-small-fixes-with-checks | pass | candidates=['conversation', 'goal'] recommended=conversation |
+| scenario | no-check-design-decision | pass | candidates=['conversation', 'advisor'] recommended=conversation |
 | scenario | leaving-without-check | pass | candidates=['conversation', 'subagents'] recommended=conversation |
 | scenario | several-small-changes-direct | pass | candidates=['conversation', 'subagents'] recommended=conversation |
-| scenario | one-sitting-feature-with-tests | pass | candidates=['goal', 'conversation', 'stophook'] recommended=goal |
+| scenario | one-sitting-feature-with-tests | pass | candidates=['conversation', 'stophook', 'goal'] recommended=stophook |
 | scenario | same-done-command-repo | pass | candidates=['stophook', 'goal', 'conversation'] recommended=stophook |
 | scenario | continues-tomorrow-with-tests | pass | candidates=['goal', 'handoff', 'conversation'] recommended=goal |
 | scenario | continues-tomorrow-no-check | pass | candidates=['conversation', 'handoff'] recommended=conversation |
-| scenario | many-items-user-stays | pass | candidates=['loop', 'goal', 'fresh'] recommended=loop |
-| scenario | overnight-long-builds | pass | candidates=['fresh', 'stophook', 'goal'] recommended=fresh |
-| scenario | gpu-experiments-unattended | pass | candidates=['fresh', 'goal', 'loop'] recommended=fresh |
+| scenario | many-items-user-stays | pass | candidates=['loop', 'fresh', 'workflow'] recommended=fresh |
+| scenario | overnight-long-builds | pass | candidates=['fresh', 'loop'] recommended=fresh |
+| scenario | gpu-experiments-unattended | pass | candidates=['fresh', 'loop', 'handoff'] recommended=fresh |
 | scenario | parallel-tasks-while-away | pass | candidates=['agentview', 'subagents', 'goal'] recommended=agentview |
 | scenario | explicit-independent-review | pass | candidates=['subagents', 'conversation'] recommended=subagents |
-| scenario | context-isolation-investigation | pass | candidates=['conversation', 'subagents', 'workflow'] recommended=subagents |
+| scenario | context-isolation-investigation | pass | candidates=['subagents', 'conversation', 'workflow'] recommended=subagents |
 | scenario | wide-audit-repeated | pass | candidates=['workflow', 'subagents', 'fresh'] recommended=workflow |
-| scenario | periodic-github-task | pass | candidates=['routine', 'fresh', 'conversation'] recommended=routine |
-| scenario | hard-in-spots-serial | pass | candidates=['advisor', 'goal', 'stophook'] recommended=advisor |
+| scenario | periodic-github-task | pass | candidates=['routine', 'loop', 'conversation'] recommended=routine |
+| scenario | hard-in-spots-serial | pass | candidates=['advisor', 'goal', 'loop'] recommended=advisor |
 | scenario | next-sessions-start-better | pass | candidates=['inbox', 'handoff', 'conversation'] recommended=inbox |
 | scenario | vague-outcome | pass | candidates=['conversation', 'subagents'] recommended=conversation |
 | trigger | How should we work this? | pass | skill fired=True |
 | trigger | Which work mode fits this migration? | pass | skill fired=True |
 | trigger | Goal or workflow for this refactor? | pass | skill fired=True |
 | trigger | Should this be a loop? | pass | skill fired=True |
-| trigger | Subagents or not for these fixes? | FAIL | skill fired=False |
-| trigger | Run this in the background while I am out. | FAIL | skill fired=False |
+| trigger | Subagents or not for these fixes? | pass | skill fired=True |
+| trigger | Run this in the background while I am out. | pass | skill fired=True |
 | trigger | Leave it running overnight. | pass | skill fired=True |
 | trigger | This continues tomorrow, how do we set it up? | pass | skill fired=True |
 | trigger | What is the best way to have the agent tackle these 40 tickets? | pass | skill fired=True |
@@ -141,7 +143,7 @@ Run 2026-11-10, model claude-sonnet-5-5
 | no_trigger | Translate this README to Spanish. | pass | skill fired=False |
 | no_trigger | Add a loop that retries the HTTP call three times. | pass | skill fired=False |
 
-37/39 passed
+39/39 passed
 <!-- evals:end -->
 
 ## Lessons behind it

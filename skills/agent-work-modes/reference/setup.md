@@ -118,6 +118,10 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
 - **Dispatch.** Launch the loop only on a verbal OK from the user. Claude starts it; the user does not paste a
   launch block. Include in that OK whether a successful first unit permits unattended continuation within the
   unchanged scope and remaining cap, or whether the user wants to review it first.
+- **Cleanup.** Note the starting branch in `LOOP-STATE.md`. When an item closes and when the run ends: return to the
+  starting branch, `git worktree remove` every worktree the loop created, and delete branches already merged into
+  the base (`git branch --merged <base>`). Never delete an unmerged branch: list it in `LOOP-HISTORY.md` and ask.
+  A loop that leaves a worktree, a stale branch or the repo on another branch has not closed.
 - **Usage log.** Before round 1, note the start time and session id in `LOOP-USAGE.md`. After each subagent, append its
   available usage and elapsed time, with their source; mark missing measurements as unknown. API-price estimates
   are not subscription-quota percentages. Commit the work in the project's own repo, never in the orchestrator's repo.
@@ -146,7 +150,8 @@ session, so prefer the fresh-session loop for long runs.
 
 0. Agree the kickoff items above first.
 1. Write `PROMPT.md` in the repo: read `LOOP-STATE.md`, take one item, do it, run its VERIFY, update the state file,
-   log evidence to `LOOP-HISTORY.md`, then stop.
+   log evidence to `LOOP-HISTORY.md`, then clean up (return to the starting branch, remove any worktree it created,
+   delete merged branches; the Cleanup rule above) and stop.
 2. Create `LOOP-STATE.md` and `LOOP-HISTORY.md` as for the in-session loop.
 3. Copy `scripts/fresh-loop.py` and `scripts/lean.py` (it imports it) to the repo. Measure what each round loads before reading its prompt, and keep
    `--lean` unless the rounds need skills, MCP servers or a parent `CLAUDE.md` (add tools with `--tools`, e.g.
@@ -200,15 +205,27 @@ again and again (`why.md`). Keep it cheap:
   strong model for the decisions the run escalates.
 
 `python scripts/session-cost.py --since <YYYYMMDD>` shows each session's startup and peak context, and how many
-times it rewrote its cache after a pause, next to its cost.
+times it rewrote its cache after a pause, next to its cost, and the spend per work mode with the share that went to
+steering loops. `--out <folder>` keeps every KPI per session in `sessions.json` without calling a model; the
+visual spend-by-mode, day, hour, project, and top-sessions views live inside `loop-status.py`'s `Usage & Spend` tab.
+Keep exported `sessions.json` folders out of the repo: the first prompts of your sessions are in them.
 
 ## Loop status board
 
-`scripts/loop-status.py` (with `loop-status.html` next to it) serves a live page for a loop from its own files:
-a flow of the items laid out by Depends (state badges, what each waits on, retry arrows, the driver and the current
-`claude -p` round with its subagents), progress bars (items, rounds of the cap, tries, tokens and cost), a session log,
-a chat to the orchestrator, and a history view across loops. It reads files and rebuilds on every request, so it costs
-the watching session nothing. Python standard library only, no external requests.
+`scripts/loop-status.py` (with `loop-status.html` next to it) serves a unified operational board on `:8765` with three
+tabs and a global Project selector (scoped to the active project by default, with an `"All projects"` option):
+
+1. **Loop & History**: live flow of items laid out by Depends (state badges, what each waits on, retry arrows, the
+   driver and current `claude -p` round with its subagents), progress bars (items, rounds of the cap, tries, tokens,
+   and cost), live `loop-config.json` limits, session log, orchestrator chat, and history across the project's loops.
+2. **Sessions & Graph**: live tree of every Claude Code, Codex, and Hermes session on this machine, indented under the
+   session that launched it (four or more of a kind fold into one row), with time bars, `SendMessage` chips,
+   `ctx_start → ctx_peak`, cache rewrites, and a session inspector on click.
+3. **Usage & Spend**: spend by work mode (`processed/output` ratio), spend per day and hour of day, spend by project,
+   and the most expensive / highest-rewrite sessions table (clicking a row jumps to that session in `Sessions & Graph`).
+
+It reads files and rebuilds on every request, so it costs the watching session nothing. `--no-cost` skips the background
+ccusage run that prices Claude sessions. Python standard library only, no external browser requests.
 
 Chat: each message from the page is appended as one JSON line (`ts`, `text`, `refs` = the node, selected text or
 page section the user attached) to `orchestrator-inbox.jsonl` in the loop folder; replies are `{"ts": ..., "text": ...}`
@@ -236,29 +253,31 @@ To stop it, kill the `python` process whose command line contains `loop-status.p
 | Flag | Default | Meaning |
 |---|---|---|
 | `--loop-dir` | cwd | The current loop's folder |
-| `--loops-glob` | `<loop-dir parent>/*` | Sibling loops for the history view; only folders with a `LOOP-STATE.md` count |
+| `--loops-glob` | active folder + `loops/*` | Sibling loops for the history view; only folders with a `LOOP-STATE.md` count |
 | `--repo` | none | Repo whose commits and tags are shown |
 | `--screenshots` | `<repo>/screenshots` | Folder served at `/shots/` |
 | `--transcripts` | none | Claude Code transcript folder (`~/.claude/projects/<mangled-path>`) for the "current round" card |
 | `--log` | none | Output file of `fresh-loop.py`, for the round counter and per-round results |
 | `--port` | 8765 | Binds 127.0.0.1 only |
-| `--title` | repo or loop folder name | Page title |
+| `--title` | repo or loop folder name | Page title and default project filter |
+| `--snapshot` | none | Write static `index.html`, `flow.json`, `history.json`, `chat.json`, `graph.json` and exit |
 | `--reply` | off | Answer each chat message with a short headless session (above) |
 | `--reply-cli` | `claude -p --model sonnet` | Command for `--reply`; the prompt goes last. Lean flags, `acceptEdits` and JSON output are added only for `claude` |
+| `--no-cost` | off | Skip background ccusage pricing; Claude nodes show no cost |
 
 Every flag except `--loop-dir` is optional; a missing input renders as an empty card.
 
 Formats it reads:
 
-- `LOOP-STATE.md`: a table `| # | Item | Depends | State | Tries |`. Column order comes from the header row.
+- `LOOP-STATE.md`: a table `| # | Item | Depends | State | Tries |`. Column order comes from the header row
+  (3-column tables without Depends/Tries default missing tries to 0).
   States: `todo`, `done`, `BLOCKED...`; the first
   `todo` whose dependencies are done is shown as in progress.
 - `LOOP-HISTORY.md`: one entry per event, `### YYYY-MM-DD HH:MM — item N: title`, then the evidence text. A title with
   `BLOCKED` is a block; one with `unblocked` or `relaunched` is an unblock; anything else counts as done.
 - `result*.json` in the loop folder: the JSON of a `claude -p --output-format json` run, for the spend card.
 
-Routes: `/` current loop · `/history` history of all loops (data from `/history.json`) · `/history/classic`
-server-rendered history · `/shots/<file>` screenshots from `--screenshots`.
+Routes: `/` and `/history` unified board · `/flow.json`, `/history.json`, `/graph.json?hours=N` data · `GET/POST /chat`, `POST /config` · `/shots/<file>` screenshots from `--screenshots`.
 
 ## Cloud routine
 

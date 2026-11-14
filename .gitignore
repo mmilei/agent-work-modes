@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 docs/pick-preview.html
 *.stackdump
+loop.log
+status-board.*
+orchestrator-*.jsonl
+result-*.json
+loop-config.json

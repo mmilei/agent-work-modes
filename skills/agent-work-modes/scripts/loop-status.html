@@ -277,7 +277,7 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
   <nav class="tabs" id="tabs" role="tablist">
     <button class="tab" type="button" data-tab="loop" role="tab">Loop &amp; History <span class="tbadge" id="badge-loop">0</span></button>
     <button class="tab" type="button" data-tab="graph" role="tab">Sessions &amp; Graph <span class="tbadge" id="badge-graph">0</span></button>
-    <button class="tab" type="button" data-tab="usage" role="tab">Usage &amp; Spend <span class="tbadge" id="badge-usage">$0.00</span></button>
+    <button class="tab" type="button" data-tab="usage" role="tab">Usage &amp; Spend <span class="tbadge" id="badge-usage">unknown</span></button>
   </nav>
 
   <!-- TAB 1: LOOP & HISTORY -->
@@ -511,6 +511,12 @@ function initDefaultProject() {
   selEl.value = base && (hasLoop || hasGraphMatch) && opts.has(base) ? base : '';
 }
 
+function knownCost(nodes) {
+  const priced = nodes.filter(n => n.cost != null);
+  if (!priced.length) return 'unknown';
+  return usd(priced.reduce((s, n) => s + n.cost, 0)) + (priced.length < nodes.length ? ' + unknown' : '');
+}
+
 function updateBadges() {
   const fItems = F?.items || [];
   const dLoops = D?.loops || [];
@@ -518,10 +524,9 @@ function updateBadges() {
   $('#badge-loop').textContent = fItems.length ? `${done}/${fItems.length}` : `${dLoops.length} loop${dLoops.length === 1 ? '' : 's'}`;
   const gNodes = G ? graphVisibleNodes() : [];
   const running = gNodes.filter(n => n.active).length;
-  $('#badge-graph').textContent = running ? `${running} live · ${gNodes.length}` : String(gNodes.length);
+  $('#badge-graph').textContent = running ? `${running} recent · ${gNodes.length}` : String(gNodes.length);
   const uNodes = G ? usageNodes() : [];
-  const totalUsd = uNodes.reduce((s, n) => s + (n.cost || 0), 0);
-  $('#badge-usage').textContent = usd(totalUsd);
+  $('#badge-usage').textContent = knownCost(uNodes);
 }
 
 function renderLoopVisibility() {
@@ -573,7 +578,7 @@ function board() {
   const usdTot = L.reduce((a, l) => a + (l.spend?.usd || 0), 0);
   const days = new Set(EV.map(e => e.t.slice(0, 10))).size;
   const k = [[L.length, '', 'loops'], [done, '/' + its.length, 'items done'], [EV.filter(e => e.kind === 'blocked').length, '', 'blocks'],
-    [num(hours, 1), 'h', 'of loop time'], [days, '', 'working days'], [D.commits.length, '', 'commits'], [D.tags.length, '', 'versions'], ['$' + num(usdTot), '', 'USD est.']];
+    [num(hours, 1), 'h', 'of loop time'], [days, '', 'working days'], [D.commits.length, '', 'commits'], [D.tags.length, '', 'versions'], [L.some(l => l.spend) ? '$' + num(usdTot) + (L.some(l => !l.spend) ? ' + unknown' : '') : 'unknown', '', 'USD est.']];
   $('#board').innerHTML = k.map(([v, e, s]) => `<div class="kpi"><b>${v}<em>${e}</em></b><span>${s}</span></div>`).join('');
 }
 
@@ -835,16 +840,18 @@ function bars() {
   const shade = i => `hsl(${100 + i * 23 % 70},55%,${42 + i % 3 * 8}%)`;
   $('#bars').innerHTML =
     pb('Items done', `${cnt('done')} / ${its.length}`, `<div class="track">${itemsBar}</div>`) +
-    pb('Rounds used', `${R.n} / ${R.cap || '?'}`, `<div class="track"><i style="width:${R.cap ? Math.min(R.n / R.cap, 1) * 100 : 0}%;background:${R.cap && R.n >= R.cap ? C.blocked : C.tag}"></i></div>`) +
+    (F.execution ? pb('Execution', esc(F.execution.stage || 'native'), '') : pb('Rounds used', `${R.n} / ${R.cap || '?'}`, `<div class="track"><i style="width:${R.cap ? Math.min(R.n / R.cap, 1) * 100 : 0}%;background:${R.cap && R.n >= R.cap ? C.blocked : C.tag}"></i></div>`)) +
     pb('Tries per item', `${its.reduce((a, i) => a + +i.tries, 0)} total · ${its.filter(i => +i.retries).length} retried`, `<div class="tries">${tries}</div>`) +
     pb('Tokens (usage lines)', F.tokens ? num(F.tokens) : 'none logged', `<div class="track">${tok.map(([u, t], i) => `<i title="${esc(u.t)} · ${num(t)} tokens · ${esc(u.text)}" style="width:${t / F.tokens * 100}%;background:${shade(i)}"></i>`).join('')}</div>`) +
-    pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'none logged', `<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`) +
+    pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'unknown', `<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`) +
     steer(sp ? sp.usd : F.usd || 0, pb);
 }
 
 function limits() {
   const el = $('#limits'), L = F.limits, sp = F.spend || {tokens: 0, usd: 0};
   if (el.contains(document.activeElement) && document.activeElement.tagName !== 'BODY') return;
+  el.previousElementSibling.querySelector('small').textContent = F.execution ? 'managed by the native orchestrator' : 'fresh-loop.py re-reads them before every round';
+  if (F.execution) { el.innerHTML = '<span class="note">Native orchestration: limits are managed by the orchestrator. Token quota and cost are unknown unless measured.</span>'; return; }
   if (!L) { el.innerHTML = '<span class="note">no loop-config.json yet: fresh-loop.py writes it when it starts</span>'; return; }
   const ro = window.SNAPSHOT ? ' disabled' : '';
   const over = {rounds: F.round.n >= L.rounds, max_tokens: L.max_tokens && sp.tokens >= L.max_tokens, max_usd: L.max_usd && sp.usd >= L.max_usd};
@@ -883,7 +890,13 @@ function flowView() {
     <div class="nn">${esc(i.title)}</div>${wait(i) ? `<div class="w">${esc(short(wait(i), 60))}</div>` : ''}
     ${+i.retries ? `<div class="w" style="color:${C.blocked}">↺ failed VERIFY ${i.retries}x, retried</div>` : ''}</div>`;
   const on = v => v === null ? 'unknown' : v ? 'running' : 'stopped';
-  const sys = `<div class="col"><div class="col-h">driver and round</div>
+  const E = F.execution;
+  const sys = E ? `<div class="col"><div class="col-h">native execution</div>
+    <div class="node" data-id="_driver" style="--k:${C.tag}"><div class="nh"><span class="id">${esc(E.harness || 'native')}</span><span class="badge">${esc(E.status || 'unknown')} · reported</span></div>
+      <div class="nn">${esc(E.provider || 'unknown provider')} · native orchestration</div>
+      <div class="w">${esc(E.stage || 'stage unknown')}</div>
+      <div class="w">${esc(E.detail || '')}</div>
+      <div class="w">reported ${esc(E.updated_at || 'time unknown')} · not a process heartbeat</div></div></div>` : `<div class="col"><div class="col-h">driver and round</div>
     <div class="node" data-id="_driver" style="--k:${C.tag}"><div class="nh"><span class="id">driver</span><span class="badge">${on(R.driver)}</span></div>
       <div class="nn">fresh-loop.py · round ${R.n} of ${R.cap || '?'}</div></div>
     <div class="node ${R.live ? 'pulse' : ''}" data-id="_round" style="--k:${R.live ? C.now : C.todo}"><div class="nh"><span class="id">claude -p</span><span class="badge">${R.live ? 'live' : on(R.live)}</span></div>
@@ -894,7 +907,7 @@ function flowView() {
   $('#lfw').innerHTML = `<div class="flow" id="lf"><svg class="edges"></svg>${sys}
     ${cols.map((c, ci) => `<div class="col"><div class="col-h">${ci === 0 ? 'no dependencies' : 'level ' + ci}</div>${c.map(node).join('')}</div>`).join('')}</div>`;
   $('#lfw').scrollLeft = keep;
-  const extra = [['_driver', '_round', 'live'], ['_round', R.item, R.live ? 'live' : ''], ...R.agents.slice(-6).map((_, j) => ['_round', '_sa' + j, 'live'])];
+  const extra = E ? [['_driver', R.item, '']] : [['_driver', '_round', 'live'], ['_round', R.item, R.live ? 'live' : ''], ...R.agents.slice(-6).map((_, j) => ['_round', '_sa' + j, 'live'])];
   $('#lf').querySelectorAll('.node').forEach(n => {
     n.onclick = () => { const i = FB[n.dataset.id]; if (i) { fpane(i.id); setRef('node', {type: 'node', id: i.id, state: i.state, label: '#' + i.id}); }
       else setRef('node', {type: 'node', id: n.dataset.id, label: n.querySelector('.id, .badge').textContent}); };
@@ -1001,8 +1014,7 @@ function usageNodes() {
   const winCut = window.SNAPSHOT ? (G.now - (+$('#hours').value) * 3600) : 0;
   return G.nodes.filter(n => n.id !== 'you' && n.provider !== 'unknown' &&
     (!winCut || (n.end || n.start) >= winCut) &&
-    (!p || cleanProj(n.project) === p) &&
-    ((n.tokens || 0) > 0 || (n.cost || 0) > 0));
+    (!p || cleanProj(n.project) === p));
 }
 
 function graphRows(nodes) {
@@ -1108,16 +1120,16 @@ function drawGraph() {
   $('#grid').innerHTML = html.join('');
   graphKpis(nodes);
   $('#glegend').innerHTML = [...new Set(nodes.map(n => n.mode))].map(m => `<span><i style="background:${modeColor(m)}"></i>${esc(m)}</span>`).join('');
-  $('#costnote').textContent = G.cost_at ? `Claude cost from ccusage at ${new Date(G.cost_at * 1000).toLocaleTimeString()}` : 'Claude cost pending (ccusage) or --no-cost';
+  $('#costnote').textContent = G.cost_at ? `Claude cost from ccusage at ${new Date(G.cost_at * 1000).toLocaleTimeString()}` : 'Unpriced sessions: cost unknown. Activity uses transcript mtime (5-minute window), not process liveness.';
   if (SEL) gpane(SEL);
 }
 
 function graphKpis(nodes) {
   const ids = new Set(nodes.map(n => n.id));
   const sum = k => G.edges.filter(e => e.kind === k && ids.has(e.from)).reduce((s, e) => s + e.n, 0);
-  const items = [[nodes.length, 'sessions'], [nodes.filter(n => n.active).length, 'running now'],
+  const items = [[nodes.length, 'sessions'], [nodes.filter(n => n.active).length, 'recent activity'],
     [fmtN(nodes.reduce((s, n) => s + (n.tokens || 0), 0)), 'tokens processed'],
-    [usd(nodes.reduce((s, n) => s + (n.cost || 0), 0)), 'estimated cost'],
+    [knownCost(nodes), 'estimated cost'],
     [sum('launched'), 'launches'], [sum('messages'), 'messages'],
     [G.edges.filter(e => e.kind === 'prompts' && ids.has(e.to)).reduce((s, e) => s + e.n, 0), 'your prompts']];
   $('#gkpis').innerHTML = items.map(([v, l]) => `<div class="kpi"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join('');
@@ -1132,7 +1144,7 @@ function gpane(id) {
   const tok = n.tok || [0, 0, 0, 0];
   const rows = [['provider', n.provider], ['mode', n.mode], ['project', cleanProj(n.project)], ['cwd', n.cwd],
     ['started', n.start && fmtT(n.start)], ['last activity', n.end && fmtT(n.end)],
-    ['duration', n.end && n.start && dur(n.end - n.start)], ['state', n.active ? 'running' : 'idle / finished'],
+    ['duration', n.end && n.start && dur(n.end - n.start)], ['transcript activity', n.active ? 'within 5 minutes' : 'no write in 5 minutes'],
     ['models', (n.models || []).join(', ')], ['tokens', fmtN(n.tokens)],
     ['input / output', `${fmtN(tok[0])} / ${fmtN(tok[1])}`], ['cache read / write', `${fmtN(tok[2])} / ${fmtN(tok[3])}`],
     ['ctx start → peak', n.ctx_peak ? `${fmtN(n.ctx_start || 0)} → ${fmtN(n.ctx_peak)}` : ''],
@@ -1170,10 +1182,10 @@ function drawUsage() {
   const steerShare = totalCost > 0 ? steer / totalCost : 0;
 
   $('#ukpis').innerHTML = [
-    [usd(totalCost), '', 'estimated spend', false],
+    [knownCost(S), '', 'estimated spend', false],
     [fmtN(allTok), '', 'tokens processed', false],
     [allTok ? Math.round(reads / allTok * 100) + '%' : '0%', '', 'cache re-read (normal ~95%)', false],
-    [Math.round(steerShare * 100) + '%', '', 'spent steering loops', steerShare > 0.2],
+    [hasUsd ? Math.round(steerShare * 100) + '%' : 'unknown', '', 'spent steering loops', steerShare > 0.2],
     [rewrites, '', 'cache rewrites after pause', false],
     [S.length, '', 'sessions', false]
   ].map(([v, e, l, w]) => `<div class="kpi"><b class="${w ? 'warn' : ''}">${esc(v)}<em>${esc(e)}</em></b><span>${esc(l)}</span></div>`).join('');
@@ -1183,8 +1195,8 @@ function drawUsage() {
   $('#umodes').innerHTML = modes.length ? modes.map(m => {
     const x = byMode[m], ratio = x.w ? Math.round(x.p / x.w) : '-';
     return `<div class="urow"><span class="n" title="${esc(m)}">${esc(m)} · ${x.n}</span>
-      <div class="utrack" style="background:none"><i style="width:${x.metric / maxMode * 100}%;background:${modeColor(m)}" title="${usd(x.cost)}"></i></div>
-      <span class="x">${usd(x.cost)} · ${ratio}×</span></div>`;
+      <div class="utrack" style="background:none"><i style="width:${x.metric / maxMode * 100}%;background:${modeColor(m)}" title="${knownCost(S.filter(s => s.mode === m))}"></i></div>
+      <span class="x">${knownCost(S.filter(s => s.mode === m))} · ${ratio}×</span></div>`;
   }).join('') : '<p class="note">no sessions in this window/project</p>';
 
   function columns(el, tickEl, keys, keyOf, label) {

@@ -1,6 +1,6 @@
 ---
 name: agent-work-modes
-description: "Use BEFORE answering whenever the user asks how to run or split a task with coding agents: subagents or not, goal or workflow, should this be a loop, run it in the background, or any request to work unattended: \"run this in the background while I am out\", leave it running, continue tomorrow, which work mode to use. Not for ordinary coding, explaining or reviewing. Helps pick the form (conversation, /goal with a goal contract, Stop-hook gate, subagents, dynamic workflow, stateful loop in session or with a fresh session per round, background session, advisor, cloud routine, handoff, learning inbox), shows the candidates on a visual page with diagrams and a six-axis profile, and once the user picks, sets the chosen form up in their repo. Never picks or launches on its own. Triggers on: how should we work this, which work mode, subagents or not, goal or workflow, should this be a loop, run this in the background, run it while I am out, leave it running, continue tomorrow, agent work modes, cómo laburamos esto, cómo lo encaramos, qué forma de trabajo conviene, conviene un loop, dejalo corriendo, sigue mañana."
+description: "Helps choose and set up a coding-agent work mode: direct conversation, goals, gates, subagents, workflows, loops, background sessions, advisor, handoff, or learning inbox. Use when the user asks how to run or split a task, whether to delegate or loop, or to work unattended (run in the background, leave it running, continue tomorrow; cómo laburamos esto, conviene un loop, dejalo corriendo). Grounds the choice in the task and constraints, shows two or three candidates visually, and sets up only the user-selected form. Not for ordinary coding, explanation, or review."
 allowed-tools: Read, Write, Edit, Bash, AskUserQuestion
 ---
 
@@ -27,7 +27,7 @@ Translate catalog text when presenting it. Form names, commands and the page's d
 The catalog's model advice is written for Claude. Before recommending models, read `orchestration` from
 `.agent-work-modes.local.json` in the repo, else from `~/.claude/agent-work-modes.json`. If neither has it and you
 are not a Claude model (Codex, Gemini, opencode or any other harness), or the user wants to mix providers, ask in
-one AskUserQuestion round: which CLI and model orchestrates, which ones do the work (per kind of piece: mechanical
+one AskUserQuestion round: which harness (native tools or CLI) and model orchestrates, which ones do the work (per kind of piece: mechanical
 edits, code, review), and at what effort. Do not invent model IDs or flags: confirm each with the CLI's `--help` or
 its model list. Save the answer:
 
@@ -43,6 +43,11 @@ in `~/.claude/agent-work-modes.json` when it holds for every repo, or in `.agent
 holds for this repo only; add that file to the repo's `.gitignore` in the same step. From then on, every candidate's
 model and effort, and the fresh-session loop's `--cli` and model flags (`reference/setup.md`), come from this file.
 The ordering rules in `why.md` ("Model and effort") still apply: one model per session, effort before model.
+
+For native harness orchestration (for example Codex collaboration tools), record the harness/provider and actual
+model/effort without substituting a headless CLI. A CLI is needed only when the chosen method actually launches it.
+When using the board, follow "Native orchestration" in `reference/setup.md`; do not label a native run as a stopped
+fresh-session driver or enable Claude chat replies by default.
 
 ## 2. Clarify the task until the choice is grounded
 

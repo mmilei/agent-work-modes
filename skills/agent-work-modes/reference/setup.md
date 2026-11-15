@@ -55,8 +55,10 @@ trigger the tests. To change the gate later, run `python scripts/test_stop_gate.
 ## Subagents
 
 One subagent per piece, with the piece as its prompt (never the whole goal), `isolation: worktree` when they edit,
-and the model picked per piece: a small one for mechanical work, a big one where judgement matters. The orchestrator
-runs the final check itself; a worker's "done" is a claim, not evidence.
+and the model picked per piece: a small one for mechanical work, a big one where judgement matters. Apply "Native
+consumption checkpoints" below before dispatch. The author runs its gate and records command, exit code, revision
+and evidence paths. The orchestrator independently checks the requested behavior and relevant evidence; repeat
+the full battery only after changes, failures, uncertain evidence or an explicit requirement.
 
 A subagent pays its startup context on every step, and the general-purpose one loads every tool (36k tokens against
 16k for one with three tools, `why.md`). When the same kind of piece repeats, define it once in
@@ -72,8 +74,9 @@ model: <haiku|sonnet|opus>
 <what it does, what it returns, and the shape of the answer>
 ```
 
-Ask for a short answer with its evidence (path, command output), not a narration: the result lands in the
-orchestrator's context and is re-read from then on.
+Ask for a short answer: verdict, revision, commands/exit codes, evidence paths and unresolved issues. Exploration
+and full logs stay in the worker/files. Read only the excerpts needed for the next decision, never dump full files,
+transcripts or diffs into the orchestrator by routine. Preserve independent review and real technical/visual gates.
 
 The built-in Explore subagent runs on the session model (on Opus when the session runs Fable with a subscription).
 To pin it, define an agent of your own with `model:` in its frontmatter, or pass `model` per invocation.
@@ -123,7 +126,7 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
   the base (`git branch --merged <base>`). Never delete an unmerged branch: list it in `LOOP-HISTORY.md` and ask.
   A loop that leaves a worktree, a stale branch or the repo on another branch has not closed.
 - **Usage log.** Before round 1, note the start time and session id in `LOOP-USAGE.md`. After each subagent, append its
-  available usage and elapsed time, with their source; mark missing measurements as unknown. API-price estimates
+   available usage and elapsed time, with their source; consult the available source before declaring data missing. API-price estimates
   are not subscription-quota percentages. Commit the work in the project's own repo, never in the orchestrator's repo.
 
 Use the first real representative unit as the setup proof; keep its work and count every attempted round within
@@ -240,6 +243,49 @@ carries a short handoff; the page marks it, and the user opens a new session wit
 cost of each reply shows next to it. Without `--reply` nobody answers unless a session appends to the outbox, which
 is the expensive resident orchestrator `fresh` is meant to avoid.
 
+### Native consumption checkpoints
+
+For subagents, workflows and native loops, agree the budget and checkpoint cadence before the first dispatch.
+Use processed tokens (input + cache reads + cache writes + output), coordinator tokens, or elapsed wall minutes;
+never translate them into an unpublished quota percentage. Store the agreed positive limit(s) in the existing
+gitignored `loop-config.json`: `max_tokens`, `max_orchestrator_tokens`, `max_minutes`. Zero disables that limit;
+at least one must be set. There is no universal coordinator percentage and no automatic model/effort switch.
+Record the actual root in `execution.session` as below. For other providers pass a graph ID via `--root-session`
+(`c:` Claude, `h:` Hermes, `x:` Codex); only observed parent/launch edges count as descendants.
+
+Run from the project, replacing `<skill>` and `<run>` with the installed skill and run folder:
+
+```sh
+python <skill>/scripts/loop-status.py --loop-dir <run> --usage-check before-first-dispatch
+# After every delivery, before the next dispatch, and at closure:
+python <skill>/scripts/loop-status.py --loop-dir <run> --usage-check after-delivery
+```
+
+The first checkpoint saves a cumulative baseline; later ones report increments since that baseline and the previous
+checkpoint, separately for the coordinator and whole observed tree. `orchestrator-usage.jsonl` holds the snapshots,
+per-session source paths, timestamps and available call counts. Ignore `orchestrator-usage*.jsonl` in the project before running it;
+keep it local with the session IDs. Existing usage logs need only the verdict and path, not copied metric tables.
+The command uses the board's local readers, without starting a server, ccusage, or a model call. Its source window
+is seven days of recently modified transcripts; a missing root or previously observed child blocks continuation.
+Calls count observed usage updates, not guaranteed provider requests; token kinds absent from a provider are not
+measured zeros. Elapsed minutes are wall time since baseline, not active model time. For a budget agreed per stage,
+set `execution.budget_started_at` to that stage's actual ISO start timestamp, once before its first checkpoint.
+This starts a separate timestamp-keyed log and measures elapsed time from the actual start, even if the first
+measurement is late. Token deltas still begin at the first captured baseline. Change the timestamp only when
+starting a new authorized stage; never reset it to evade a cap. The printed `log` is the exact evidence path.
+Unpriced spend and subscription
+quota remain unavailable. Consult the actual files/DB before accepting missing telemetry; if still unavailable,
+stop new dispatches and let the user choose a bounded continuation. Completed work remains valid.
+
+Exit **0** permits the next dispatch within the agreed scope. Exit **2** means stop: missing budget/telemetry,
+decreasing counters, or an exhausted limit. `on_limit: warn` does not bypass this native gate. Inspect the reason
+and get authorization before raising a limit. A checkpoint is required before each dispatch, after each delivery,
+and at closure; during long workers, use bounded waits and check at the agreed cadence. Do not wake a model for
+periodic narration. If a cap is reached with workers active, pause/interrupt them through the harness at a safe
+checkpoint and preserve their work. This gate controls continuation when invoked by the orchestrator; it cannot
+interrupt a native worker or intercept harness tools on its own. Review coordinator growth at the first delivery and
+each checkpoint, even below the cap: narrow reads/returns and eliminate duplicate checks before continuing.
+
 ### Native orchestration
 
 When the current harness orchestrates its own agents, no external loop process is expected. Reuse the board with
@@ -261,7 +307,8 @@ failure. These are dated reports, not process heartbeats. Planned workers belong
 `session` binds the real root and observed descendants from the existing Codex transcript reader to the board's
 project title, even when the workspace cwd differs from the game's repo. No session is fabricated if telemetry is
 unavailable. Native static snapshots omit host sessions rather than synthesizing a graph from history. Verify all three tabs against actual runtime evidence before presenting the board. Costs that cannot
-be priced remain unknown; `--no-cost` does not mean zero spend or quota. Native limits stay with the orchestrator.
+be priced remain unknown; `--no-cost` does not mean zero spend or quota. Apply the consumption checkpoints above;
+updating the board's status alone does not enforce the agreed budget.
 
 ### Starting the board
 

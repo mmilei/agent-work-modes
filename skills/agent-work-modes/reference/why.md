@@ -112,6 +112,10 @@ cache reads + output, divided by output): it shows how much context each step dr
 - **Steering is the expensive part of a loop.** Sessions that watched or directed loops took 41% of the loops'
   spend and processed ~270 tokens per output token, against ~117 for the rounds they directed. The board's chat with
   `--reply` answers with one short session per message instead (about US$ 0.03 a reply).
+- **Measure before continuing.** A board that nobody consults cannot limit the coordinator. Use the executable
+  checkpoints in `setup.md` before dispatch and between deliveries; compare coordinator and worker increments
+  against the agreed budget, not a universal ratio. Keep full exploration in the worker and inspect evidence
+  selectively. Independent acceptance checks do not require repeating an unchanged author's entire test battery.
 - **In-session loops cost by duration, fresh loops by startup.** Median in-session run: 18 M tokens, 257k peak
   context. Median fresh round: 223k.
 

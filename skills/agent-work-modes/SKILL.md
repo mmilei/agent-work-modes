@@ -46,6 +46,9 @@ The ordering rules in `why.md` ("Model and effort") still apply: one model per s
 
 For native harness orchestration (for example Codex collaboration tools), record the harness/provider and actual
 model/effort without substituting a headless CLI. A CLI is needed only when the chosen method actually launches it.
+Choose effort per task; do not inherit High across all roles by default. Never change the user's model or effort
+without authorization. Before any agent dispatch, apply the executable consumption checkpoints in
+`reference/setup.md`, "Native consumption checkpoints"; the board alone is not a budget check.
 When using the board, follow "Native orchestration" in `reference/setup.md`; do not label a native run as a stopped
 fresh-session driver or enable Claude chat replies by default.
 
@@ -108,7 +111,8 @@ round on a real representative unit, or show the exact command the user has to t
 terminal). For any autonomous form, also offer the Gate block at the end of `reference/setup.md`.
 
 For either loop form, agree the kickoff items in `reference/setup.md` ("Before the first loop round") before the first
-round: scope, budget, stop rule, model per piece, effort and dispatch.
+round: scope, budget, stop rule, model per piece, effort and dispatch. Subagents and dynamic workflows also need
+the consumption checkpoints before the first dispatch and between deliveries.
 
 Ask before anything outside the repo: creating repos, scheduling routines, pushing.
 First loop in a project with a notes vault: offer the optional second-brain integration once (`reference/setup.md`).

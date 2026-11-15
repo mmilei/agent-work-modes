@@ -3,6 +3,7 @@
     python loop-status.py [--loop-dir DIR] [--loops-glob GLOB] [--repo DIR] [--transcripts DIR]
                           [--log FILE] [--port 8765] [--title NAME] [--snapshot DIR]
                           [--reply [--reply-cli CMD]] [--no-cost]
+    python loop-status.py --loop-dir DIR --usage-check STAGE [--root-session x:ID]
 
 Serves http://127.0.0.1:<port>/ (loop-status.html) with three tabs:
   1. Loop & History: live item DAG by Depends, driver/round status, progress bars, live limits,
@@ -16,6 +17,7 @@ POST /chat, POST /config, /shots/<file>.
 
 --snapshot DIR writes a static read-only copy (index.html, flow.json, history.json, chat.json,
 graph.json) into DIR and exits. --no-cost skips the background ccusage pricing worker.
+--usage-check records local usage and exits (0: continue, 2: stop), without starting a server or pricing worker.
 """
 import argparse
 import hashlib
@@ -67,6 +69,8 @@ ap.add_argument("--snapshot", default="", help="write a static read-only board i
 ap.add_argument("--reply", action="store_true", help="answer each chat message with a short headless session")
 ap.add_argument("--reply-cli", default="claude -p --model sonnet", help="command for --reply; the prompt goes last")
 ap.add_argument("--no-cost", action="store_true", help="skip ccusage; Claude nodes show no cost")
+ap.add_argument("--usage-check", metavar="STAGE", help="record a native usage checkpoint and exit; nonzero blocks dispatch")
+ap.add_argument("--root-session", help="graph session ID (x:, c:, h:); defaults to execution.session as Codex")
 args = ap.parse_args() if __name__ == "__main__" else ap.parse_args([])
 
 LOOP = Path(args.loop_dir).resolve()
@@ -359,7 +363,8 @@ def flow_data():
 
 
 CONFIG = "loop-config.json"
-CONFIG_FIELDS = {"rounds": (int, 1), "max_tokens": (int, 0), "max_usd": ((int, float), 0)}
+CONFIG_FIELDS = {"rounds": (int, 1), "max_tokens": (int, 0), "max_usd": ((int, float), 0),
+                 "max_orchestrator_tokens": (int, 0), "max_minutes": ((int, float), 0)}
 
 
 def loop_config():
@@ -542,7 +547,8 @@ def cached(path, parse):
 def claude_file(f):
     d = {"prompt": "", "prompts": 0, "start": 0, "end": 0, "headless": False, "name": "", "cwd": "",
          "models": set(), "tok": [0, 0, 0, 0], "spawns": {}, "sends": Counter(), "launches": [], "monitors": 0,
-         "tools": set(), "ctx_start": 0, "ctx_peak": 0, "rewrites": 0, "processed": 0, "written": 0}
+         "tools": set(), "ctx_start": 0, "ctx_peak": 0, "rewrites": 0, "processed": 0, "written": 0,
+         "usage_available": False, "calls": 0, "telemetry_source": str(f), "token_fields": None}
     seen, ctx, rewrites, processed, written, last = set(), [], 0, 0, 0, None
     for line in f.open(encoding="utf-8", errors="replace"):
         try:
@@ -584,8 +590,12 @@ def claude_file(f):
         u, key = msg.get("usage"), (msg.get("id"), e.get("requestId"))
         if u and key not in seen:
             seen.add(key)
-            for i, k in enumerate(("input_tokens", "output_tokens", "cache_read_input_tokens",
-                                   "cache_creation_input_tokens")):
+            d["usage_available"] = u.get("input_tokens") is not None and u.get("output_tokens") is not None
+            d["calls"] += 1
+            keys = ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+            fields = [u.get(k) is not None for k in keys]
+            d["token_fields"] = [a and b for a, b in zip(d["token_fields"], fields)] if d["token_fields"] else fields
+            for i, k in enumerate(keys):
                 d["tok"][i] += u.get(k) or 0
             write = u.get("cache_creation_input_tokens") or 0
             total = (u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0) + write
@@ -608,7 +618,8 @@ def claude_file(f):
 
 def codex_file(f):
     d = {"prompt": "", "prompts": 0, "start": 0, "end": 0, "cwd": "", "models": set(), "tok": [0, 0, 0, 0],
-         "id": "", "parent": "", "source": ""}
+         "id": "", "parent": "", "source": "", "usage_available": False, "calls": 0, "token_fields": None}
+    previous_usage = None
     for line in f.open(encoding="utf-8", errors="replace"):
         try:
             e = json.loads(line)
@@ -634,7 +645,15 @@ def codex_file(f):
                     d["prompt"] = words[:300]
                     break
         elif p.get("type") == "token_count":
-            u = (p.get("info") or {}).get("total_token_usage") or {}
+            u = (p.get("info") or {}).get("total_token_usage")
+            if not u:
+                continue
+            d["usage_available"] = u.get("input_tokens") is not None and u.get("output_tokens") is not None
+            if u != previous_usage:
+                d["calls"] += 1
+            previous_usage = u
+            d["token_fields"] = [u.get(k) is not None for k in
+                                 ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_input_tokens")]
             cached_in = u.get("cached_input_tokens") or 0
             d["tok"] = [(u.get("input_tokens") or 0) - cached_in, u.get("output_tokens") or 0, cached_in,
                         u.get("cache_write_input_tokens") or 0]
@@ -648,6 +667,8 @@ def node(nid, provider, band, d, **extra):
          "ctx_start": d.get("ctx_start", 0), "ctx_peak": d.get("ctx_peak", 0), "rewrites": d.get("rewrites", 0),
          "processed": d.get("processed", sum(d["tok"])), "written": d.get("written", d["tok"][1]),
          "cost": None, "sends": 0, "monitors": 0, "rounds": 0, "label": "", "mode": provider}
+    n.update(usage_available=d.get("usage_available", False), calls=d.get("calls"), token_fields=d.get("token_fields"))
+    n["source"] = d.get("telemetry_source")
     n.update(extra)
     return n
 
@@ -757,7 +778,7 @@ def build(hours=24, project=""):
         nodes[cid] = node(cid, "codex", "subagents" if pid else "interactive", d,
                           mode="codex subagent" if pid else "codex", active=now - f.stat().st_mtime < ACTIVE_S,
                           label=d["source"] if pid and d["source"] else d["prompt"][:60], parent=pid,
-                          project=Path(d["cwd"]).name)
+                          project=Path(d["cwd"]).name, source=str(f))
         if pid:
             edge(pid, cid, "launched")
         else:
@@ -782,12 +803,15 @@ def build(hours=24, project=""):
                 hid, pid = "h:" + r["id"], "h:" + r["parent_session_id"] if r.get("parent_session_id") else ""
                 end = r.get("last_activity_at") or r.get("ended_at") or r["started_at"]
                 d = {"start": r["started_at"], "end": end, "prompt": " ".join((r.get("title") or "").split()),
+                     "usage_available": r.get("input_tokens") is not None and r.get("output_tokens") is not None,
+                     "token_fields": [r.get(k) is not None for k in
+                                      ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")],
                      "prompts": r.get("message_count") or 0, "cwd": r.get("cwd") or "",
                      "models": {r["model"]} if r.get("model") else set(),
                      "tok": [r.get("input_tokens") or 0, r.get("output_tokens") or 0, r.get("cache_read_tokens") or 0,
                              r.get("cache_write_tokens") or 0]}
                 band = "subagents" if pid else "loops" if r.get("source") == "cron" else "interactive"
-                nodes[hid] = node(hid, "hermes", band, d, mode="hermes " + (r.get("source") or ""),
+                nodes[hid] = node(hid, "hermes", band, d, mode="hermes " + (r.get("source") or ""), source=str(db),
                                   active=not r.get("ended_at") and now - end < ACTIVE_S, parent=pid,
                                   label=d["prompt"][:60] or r.get("source") or "hermes", project=profile,
                                   cost=r.get("estimated_cost_usd"))
@@ -830,6 +854,83 @@ def build(hours=24, project=""):
            if a in nodes and b in nodes and n]
     return {"now": now, "since": cut, "hours": hours, "default_project": TITLE, "projects": all_projects,
             "nodes": list(nodes.values()), "edges": out, "cost_at": COST_AT[0]}
+
+
+def usage_check(stage, root=None):
+    """Budget gate for native dispatch, using the board's existing transcript readers."""
+    cfg = json.loads((LOOP / CONFIG).read_text(encoding="utf-8")) if (LOOP / CONFIG).exists() else {}
+    if not isinstance(cfg, dict):
+        raise ValueError("loop-config.json must be an object")
+    root = root or "x:" + (native_execution() or {}).get("session", "")
+    if root in ("x:", ""):
+        raise ValueError("set execution.session or pass --root-session with a graph ID")
+    graph = build(hours=24 * 7)
+    ids = {root}
+    while True:
+        children = {e["to"] for e in graph["edges"] if e["from"] in ids and e["kind"] == "launched"}
+        if children <= ids:
+            break
+        ids |= children
+    sessions = {n["id"]: {k: n.get(k) for k in ("tok", "calls", "start", "end", "usage_available", "source", "token_fields")}
+                for n in graph["nodes"] if n["id"] in ids}
+    budget_start = (native_execution() or {}).get("budget_started_at")
+    started = ts(budget_start) if budget_start else 0
+    if budget_start and not 0 < started <= graph["now"]:
+        raise ValueError("execution.budget_started_at must be a valid past ISO timestamp")
+    suffix = "-" + hashlib.sha1(budget_start.encode()).hexdigest()[:10] if budget_start else ""
+    log = LOOP / ("orchestrator-usage" + suffix + ".jsonl")
+    history = [json.loads(line) for line in (log.read_text(encoding="utf-8").splitlines() if log.exists() else []) if line.strip()]
+    history = [r for r in history if r["root"] == root]
+    baselines = [r for r in history if (r["sessions"].get(root) or {}).get("usage_available")]
+    baseline = baselines[0] if baselines else {"at": graph["now"], "sessions": sessions}
+    previous = baselines[-1] if baselines else baseline
+
+    def delta(checkpoint):
+        totals, coordinator, calls = [0] * 4, 0, 0
+        for sid, n in sessions.items():
+            old = checkpoint["sessions"].get(sid, {})
+            tok = [max(0, a - b) for a, b in zip(n["tok"], old.get("tok", [0] * 4))]
+            totals = [a + b for a, b in zip(totals, tok)]
+            coordinator += sum(tok) if sid == root else 0
+            calls += max(0, n["calls"] - (old.get("calls") or 0)) if n["calls"] is not None else 0
+        kinds = ("input", "output", "cache_read", "cache_write")
+        counts = {k: totals[i] if sessions and all((n["token_fields"] or [False] * 4)[i] for n in sessions.values())
+                  else None for i, k in enumerate(kinds)}
+        return {"processed": sum(totals), "orchestrator": coordinator, **counts,
+                "observed_usage_calls": calls if sessions and all(n["calls"] is not None for n in sessions.values()) else None}
+
+    total = delta(baseline)
+    elapsed = (graph["now"] - (started or baseline["at"])) / 60
+    limits = {k: cfg.get(k, 0) for k in ("max_tokens", "max_orchestrator_tokens", "max_minutes")}
+    for k, v in limits.items():
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v < float("inf"):
+            raise ValueError(f"{k}: expected a finite nonnegative number")
+    reasons = []
+    if not any(limits.values()):
+        reasons.append("no agreed token/time budget in loop-config.json")
+    ids |= {sid for r in history for sid in r["sessions"]}
+    missing = sorted((ids - sessions.keys()) | {sid for sid, n in sessions.items() if not n["usage_available"]})
+    if missing:
+        reasons.append("telemetry missing for " + ", ".join(missing))
+    if any(any(a < b for a, b in zip(n["tok"], previous["sessions"].get(sid, {}).get("tok", [0] * 4)))
+           for sid, n in sessions.items()):
+        reasons.append("usage counters decreased; inspect the source before continuing")
+    for k, value in (("max_tokens", total["processed"]), ("max_orchestrator_tokens", total["orchestrator"]),
+                     ("max_minutes", elapsed)):
+        if limits[k] and value >= limits[k]:
+            reasons.append(f"{k} reached: {value:g} >= {limits[k]:g}")
+    rec = {"at": graph["now"], "stage": stage, "root": root, "sessions": sessions,
+           "cumulative_processed": sum(sum(n["tok"]) for n in sessions.values()),
+           "cumulative_orchestrator": sum(sessions.get(root, {}).get("tok", [])),
+           "since_baseline": total, "since_previous": delta(previous), "elapsed_minutes": round(elapsed, 2),
+           "limits": limits, "status": "stop" if reasons else "ok", "reasons": reasons, "log": str(log),
+           "source": "local transcripts / Hermes session DB via loop-status.build (last 7 days)",
+           "unavailable": ["subscription quota percentage", "unpriced spend", "per-session active duration",
+                           "cache writes where provider does not expose them", "calls without usage events"]}
+    with log.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+    print(json.dumps({k: v for k, v in rec.items() if k != "sessions"}))
+    return 2 if reasons else 0
 
 
 def cost_worker():
@@ -1045,7 +1146,12 @@ def snapshot(out):
     print(f"snapshot written to {out}")
 
 
-if __name__ == "__main__" and args.snapshot:
+if __name__ == "__main__" and args.usage_check:
+    try:
+        raise SystemExit(usage_check(args.usage_check, args.root_session))
+    except (OSError, ValueError) as exc:
+        ap.exit(2, f"usage checkpoint blocked: {exc}\n")
+elif __name__ == "__main__" and args.snapshot:
     snapshot(Path(args.snapshot))
 elif __name__ == "__main__":
     print(f"loop status: http://127.0.0.1:{args.port}/", flush=True)

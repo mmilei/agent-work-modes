@@ -1,5 +1,7 @@
 """Live board & session graph checks: python skills/agent-work-modes/scripts/test_loop_status.py."""
 import importlib.util
+import contextlib
+import io
 import json
 import socket
 import sqlite3
@@ -331,7 +333,98 @@ def test_native_execution():
         assert "old-private-id" not in (out / "flow.json").read_text(encoding="utf-8"), "refresh strips old snapshot IDs"
 
 
+def test_review_attempts_are_not_verify_failures():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        m.LOOP = Path(tmp)
+        m.args.snapshot = True
+        (m.LOOP / "LOOP-STATE.md").write_text(
+            "Tries counts review deliveries.\n\n| # | Item | State | Tries |\n|---|---|---|---|\n"
+            "| 1 | Review returned twice | done | 3 |\n| 2 | Check failed once | done | 2 |\n", encoding="utf-8")
+        (m.LOOP / "LOOP-HISTORY.md").write_text(
+            "### 2026-01-01 10:00 - item 1: Review returned\nVERIFY: PASS\nCode review: REVISE\n"
+            "### 2026-01-01 11:00 - item 2: Check failed\nVERIFY: FAIL\nexit code 1\n"
+            "### 2026-01-01 12:00 - item 2: Fixed\nVERIFY: PASS\n", encoding="utf-8")
+        items = m.flow_data()["items"]
+        assert items[0]["retries"] == 2 and items[0]["verify_failures"] == 0
+        assert items[1]["retries"] == 1 and items[1]["verify_failures"] == 1
+        labels = subprocess.check_output([
+            "node", "-e",
+            "const fs=require('node:fs'),vm=require('node:vm');"
+            "const html=fs.readFileSync(process.argv[1],'utf8');"
+            "vm.runInThisContext(html.match(/function retryLabel\\([^]*?\\n}/)[0]);"
+            "console.log(JSON.stringify(JSON.parse(process.argv[2]).map(retryLabel)));",
+            str(Path(SCRIPT).with_suffix(".html")), json.dumps(items)], text=True)
+        labels = json.loads(labels)
+        assert "failed VERIFY" not in labels[0] and "2" in labels[0], labels
+        assert "failed VERIFY 1x" in labels[1], labels
+
+
+def test_codex_rollout_counters():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        m.LOOP, m.CLAUDE, m.CODEX, m.HERMES = root, root / "claude", root / "codex", []
+        m.CODEX.mkdir()
+        (root / "loop-config.json").write_text(json.dumps({"max_tokens": 100000,
+            "execution": {"mode": "native", "session": "synthetic-chat"}}), encoding="utf-8")
+        def write(name, usages, sid="synthetic-chat", parent=""):
+            events = [{"type": "session_meta", "timestamp": "2026-01-01T00:00:00Z",
+                       "payload": {"id": sid, "parent_thread_id": parent, "cwd": "/synthetic"}}]
+            for index, (total, last) in enumerate(usages):
+                events.append({"type": "event_msg", "timestamp": f"2026-01-01T00:0{name[-1]}:{index:02d}Z",
+                    "payload": {"type": "token_count", "info": {"total_token_usage": total, "last_token_usage": last}}})
+            (m.CODEX / (name + ".jsonl")).write_text("\n".join(map(json.dumps, events)), encoding="utf-8")
+            m._cache.clear()
+        def counts(n):
+            return {"input_tokens": n, "output_tokens": n // 10, "cached_input_tokens": n // 2,
+                    "cache_write_input_tokens": 0}
+        def check(stage):
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = m.usage_check(stage)
+            record = json.loads((root / "orchestrator-usage.jsonl").read_text().splitlines()[-1])
+            return status, record
+        write("rollout1", [(counts(1000), counts(1000))])
+        write("child4", [(counts(100), counts(100))], sid="synthetic-child", parent="synthetic-chat")
+        assert check("baseline")[0] == 0
+        write("rollout2", [(counts(100), counts(100)), (counts(200), counts(100))])
+        status, record = check("new-file-same-chat")
+        assert status == 0, record["reasons"]
+        assert record["cumulative_orchestrator"] == 1320, record
+        assert record["since_baseline"]["processed"] == 220, record
+        assert len(record["sessions"]) == 2
+        assert sum(record["sessions"]["x:synthetic-child"]["tok"]) == 110
+        log = root / "orchestrator-usage.jsonl"
+        saved = log.read_text()
+        old_baseline = json.loads(saved.splitlines()[0])
+        old_baseline["sessions"]["x:synthetic-chat"].pop("source_tokens")
+        log.write_text(json.dumps(old_baseline) + "\n")
+        assert check("baseline-without-rollout-coverage")[0] == 2
+        log.write_text(saved)
+        # A copied transcript must not double-charge the same usage events.
+        (m.CODEX / "copy.jsonl").write_bytes((m.CODEX / "rollout2.jsonl").read_bytes())
+        assert check("copied-file")[1]["cumulative_orchestrator"] == 1320
+        (m.CODEX / "copy.jsonl").unlink()
+        # Disappearing sources must keep the gate stopped until restored.
+        assert check("missing-source")[0] == 2
+        assert check("still-missing-source")[0] == 2
+        (m.CODEX / "copy.jsonl").write_bytes((m.CODEX / "rollout2.jsonl").read_bytes())
+        assert check("restored-source")[0] == 0
+        # Growth elsewhere must not hide a genuine decrease in an existing source.
+        write("rollout1", [(counts(900), counts(900))])
+        write("rollout2", [(counts(500), counts(500))])
+        status, record = check("real-decrease")
+        assert status == 2 and any("decreased" in r for r in record["reasons"]), record
+        assert check("still-decreased")[0] == 2
+        # A carried cumulative total is not evidence of an independent segment.
+        write("rollout3", [(counts(2000), counts(100))])
+        status, record = check("ambiguous-cumulative")
+        assert status == 2 and any("telemetry" in r for r in record["reasons"]), record
+
+
 if __name__ == "__main__":
+    test_review_attempts_are_not_verify_failures()
+    test_codex_rollout_counters()
     test_native_execution()
     test_flow_and_chat()
     test_config()

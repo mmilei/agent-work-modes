@@ -236,7 +236,7 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .urow{display:grid;grid-template-columns:minmax(90px,210px) minmax(0,1fr) 128px;gap:10px;align-items:center;margin:7px 0;font-size:13px}
 .urow.click{cursor:pointer;border-radius:6px;padding:2px 4px;margin:5px -4px}.urow.click:hover{background:var(--card2)}
 .urow .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.urow .x{text-align:right;font:500 11.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--dim);white-space:nowrap}
+.urow .x{text-align:right;font:500 11.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--dim);overflow-wrap:anywhere}
 .utrack{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--line)}.utrack i{display:block;height:100%}
 .cols{display:flex;align-items:flex-end;gap:4px;height:150px;border-bottom:1px solid var(--line);padding-top:8px}
 .cols > div{flex:1;display:flex;flex-direction:column-reverse;min-width:0;height:100%}.cols i{display:block}
@@ -277,7 +277,7 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
   <nav class="tabs" id="tabs" role="tablist">
     <button class="tab" type="button" data-tab="loop" role="tab">Loop &amp; History <span class="tbadge" id="badge-loop">0</span></button>
     <button class="tab" type="button" data-tab="graph" role="tab">Sessions &amp; Graph <span class="tbadge" id="badge-graph">0</span></button>
-    <button class="tab" type="button" data-tab="usage" role="tab">Usage &amp; Spend <span class="tbadge" id="badge-usage">unknown</span></button>
+    <button class="tab" type="button" data-tab="usage" role="tab">Usage &amp; Spend <span class="tbadge" id="badge-usage">—</span></button>
   </nav>
 
   <!-- TAB 1: LOOP & HISTORY -->
@@ -394,7 +394,7 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
   <div class="tabview" id="tab-usage">
     <div class="board" id="ukpis" style="margin-top:0"></div>
     <section>
-      <h2>Spend by work mode <small>tokens processed per output token on the right</small></h2>
+      <h2>Tokens by work mode <small>tokens processed per output token on the right</small></h2>
       <div class="panel">
         <div class="legend" id="ulegend" style="margin-top:0;margin-bottom:10px"></div>
         <div id="umodes"></div>
@@ -403,18 +403,18 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
     </section>
     <section class="two">
       <div class="panel">
-        <h2 style="margin-bottom:10px">Spend per day <small>stacked by work mode</small></h2>
+        <h2 style="margin-bottom:10px">Tokens per day <small>stacked by work mode</small></h2>
         <div class="cols" id="udays"></div>
         <div class="ticks" id="udayt"></div>
       </div>
       <div class="panel">
-        <h2 style="margin-bottom:10px">Spend by hour <small>local time, stacked by work mode</small></h2>
+        <h2 style="margin-bottom:10px">Tokens by hour <small>local time, stacked by work mode</small></h2>
         <div class="cols" id="uhours"></div>
         <div class="ticks" id="uhourt"></div>
       </div>
     </section>
     <section>
-      <h2>Spend by project <small>click a project to filter the whole board</small></h2>
+      <h2>Tokens by project <small>click a project to filter the whole board</small></h2>
       <div class="panel" id="uprojects"></div>
     </section>
     <section>
@@ -517,6 +517,11 @@ function knownCost(nodes) {
   return usd(priced.reduce((s, n) => s + n.cost, 0)) + (priced.length < nodes.length ? ' + unknown' : '');
 }
 
+function usageAmount(nodes) {
+  const tokens = fmtN(nodes.reduce((s, n) => s + (n.tokens || 0), 0)) + ' tok';
+  return tokens + (nodes.length && nodes.every(n => n.cost != null) ? ' (' + knownCost(nodes) + ')' : '');
+}
+
 function updateBadges() {
   const fItems = F?.items || [];
   const dLoops = D?.loops || [];
@@ -526,7 +531,7 @@ function updateBadges() {
   const running = gNodes.filter(n => n.active).length;
   $('#badge-graph').textContent = running ? `${running} recent · ${gNodes.length}` : String(gNodes.length);
   const uNodes = G ? usageNodes() : [];
-  $('#badge-usage').textContent = knownCost(uNodes);
+  $('#badge-usage').textContent = usageAmount(uNodes);
 }
 
 function renderLoopVisibility() {
@@ -881,6 +886,11 @@ function steer(run, pb) {
     `<div class="track"><i style="width:${Math.min(share, 1) * 100}%;background:${over ? C.blocked : C.tag}"></i></div>`);
 }
 
+function retryLabel(i) {
+  if (i.verify_failures) return `↺ failed VERIFY ${i.verify_failures}x${+i.retries ? ', retried' : ''}`;
+  return +i.retries ? `↺ ${i.retries} additional attempt${+i.retries === 1 ? '' : 's'}` : '';
+}
+
 function flowView() {
   const its = F.items, R = F.round, cols = layers(its, FB);
   const wait = i => i.kind === 'waiting' ? 'waits on ' + i.waits.map(x => '#' + x).join(' ') : i.kind === 'gate' ? 'waits for the user'
@@ -888,7 +898,7 @@ function flowView() {
   const node = i => `<div class="node ${i.kind === 'now' ? 'pulse' : ''}" data-id="${esc(i.id)}" data-retry="${+i.retries}" style="--k:${kc(i.kind)}" title="${esc(i.state)}">
     <div class="nh"><span class="id">#${esc(i.id)}</span><span class="badge">${LK[i.kind]}</span><span class="tr">${+i.tries ? i.tries + (+i.tries > 1 ? ' tries' : ' try') : ''}</span></div>
     <div class="nn">${esc(i.title)}</div>${wait(i) ? `<div class="w">${esc(short(wait(i), 60))}</div>` : ''}
-    ${+i.retries ? `<div class="w" style="color:${C.blocked}">↺ failed VERIFY ${i.retries}x, retried</div>` : ''}</div>`;
+    ${retryLabel(i) ? `<div class="w" style="color:${i.verify_failures ? C.blocked : 'var(--dim)'}">${esc(retryLabel(i))}</div>` : ''}</div>`;
   const on = v => v === null ? 'unknown' : v ? 'running' : 'stopped';
   const E = F.execution;
   const sys = E ? `<div class="col"><div class="col-h">native execution</div>
@@ -915,7 +925,7 @@ function flowView() {
   });
   requestAnimationFrame(() => edges(FB, $('#lf'), extra));
   $('#llegend').innerHTML = Object.keys(LK).map(k => `<span><i style="background:${kc(k)}"></i>${LK[k]}</span>`).join('') +
-    `<span><i style="background:${C.blocked};border-radius:1px;height:3px"></i>retry (failed VERIFY)</span><span><i style="background:${C.now};border-radius:1px;height:3px"></i>live round</span>`;
+    `<span><i style="background:${C.blocked};border-radius:1px;height:3px"></i>retry (additional attempt)</span><span><i style="background:${C.now};border-radius:1px;height:3px"></i>live round</span>`;
   fpane(FB[fSel] ? fSel : F.current || its[0]?.id);
 }
 
@@ -1164,28 +1174,26 @@ function drawUsage() {
   if (!G) return;
   const S = usageNodes();
   const sum = (a, f) => a.reduce((t, x) => t + f(x), 0);
-  const totalCost = sum(S, s => s.cost || 0);
   const allTok = sum(S, s => s.tokens || 0);
   const reads = sum(S, s => (s.tok && s.tok[2]) || 0);
   const rewrites = sum(S, s => s.rewrites || 0);
-  const hasUsd = totalCost > 0;
-  const metric = s => hasUsd ? (s.cost || 0) : (s.tokens || 0);
+  const metric = s => s.tokens || 0;
 
   const byMode = {};
   S.forEach(s => {
-    const m = byMode[s.mode] ||= {cost: 0, metric: 0, n: 0, p: 0, w: 0};
-    m.cost += s.cost || 0; m.metric += metric(s); m.n++;
+    const m = byMode[s.mode] ||= {metric: 0, n: 0, p: 0, w: 0};
+    m.metric += metric(s); m.n++;
     m.p += s.processed ?? s.tokens ?? 0; m.w += s.written ?? (s.tok ? s.tok[1] : 0);
   });
   const modes = Object.keys(byMode).sort((a, b) => (byMode[b].metric - byMode[a].metric) || (byMode[b].p - byMode[a].p));
-  const steer = byMode['steering a loop']?.cost || 0;
-  const steerShare = totalCost > 0 ? steer / totalCost : 0;
+  const steer = byMode['steering a loop']?.metric || 0;
+  const steerShare = allTok > 0 ? steer / allTok : 0;
 
   $('#ukpis').innerHTML = [
-    [knownCost(S), '', 'estimated spend', false],
+    [usageAmount(S), '', 'usage (est. price)', false],
     [fmtN(allTok), '', 'tokens processed', false],
     [allTok ? Math.round(reads / allTok * 100) + '%' : '0%', '', 'cache re-read (normal ~95%)', false],
-    [hasUsd ? Math.round(steerShare * 100) + '%' : 'unknown', '', 'spent steering loops', steerShare > 0.2],
+    [Math.round(steerShare * 100) + '%', '', 'tokens steering loops', steerShare > 0.2],
     [rewrites, '', 'cache rewrites after pause', false],
     [S.length, '', 'sessions', false]
   ].map(([v, e, l, w]) => `<div class="kpi"><b class="${w ? 'warn' : ''}">${esc(v)}<em>${esc(e)}</em></b><span>${esc(l)}</span></div>`).join('');
@@ -1195,8 +1203,8 @@ function drawUsage() {
   $('#umodes').innerHTML = modes.length ? modes.map(m => {
     const x = byMode[m], ratio = x.w ? Math.round(x.p / x.w) : '-';
     return `<div class="urow"><span class="n" title="${esc(m)}">${esc(m)} · ${x.n}</span>
-      <div class="utrack" style="background:none"><i style="width:${x.metric / maxMode * 100}%;background:${modeColor(m)}" title="${knownCost(S.filter(s => s.mode === m))}"></i></div>
-      <span class="x">${knownCost(S.filter(s => s.mode === m))} · ${ratio}×</span></div>`;
+      <div class="utrack" style="background:none"><i style="width:${x.metric / maxMode * 100}%;background:${modeColor(m)}" title="${usageAmount(S.filter(s => s.mode === m))}"></i></div>
+      <span class="x">${usageAmount(S.filter(s => s.mode === m))} · ${ratio}×</span></div>`;
   }).join('') : '<p class="note">no sessions in this window/project</p>';
 
   function columns(el, tickEl, keys, keyOf, label) {
@@ -1204,8 +1212,7 @@ function drawUsage() {
     S.forEach(s => { const k = keyOf(s); if (k == null || !(k in b)) return; b[k][s.mode] = (b[k][s.mode] || 0) + metric(s); });
     const max = Math.max(...keys.map(k => sum(Object.values(b[k]), x => x)), 1e-9);
     $(el).innerHTML = keys.length ? keys.map(k => {
-      const tot = sum(Object.values(b[k]), x => x);
-      const tip = `${label(k)} · ${hasUsd ? usd(tot) : fmtN(tot) + ' tok'}`;
+      const tip = `${label(k)} · ${usageAmount(S.filter(s => keyOf(s) === k))}`;
       return `<div title="${esc(tip)}">${modes.filter(m => b[k][m]).map(m => `<i style="height:${b[k][m] / max * 140}px;background:${modeColor(m)}"></i>`).join('')}</div>`;
     }).join('') : '<p class="note" style="margin:auto">no data</p>';
     const every = Math.max(1, Math.ceil(keys.length / 12));
@@ -1225,14 +1232,12 @@ function drawUsage() {
 
   const byProj = {};
   S.forEach(s => { const p = cleanProj(s.project); byProj[p] = (byProj[p] || 0) + metric(s); });
-  const projCost = {};
-  S.forEach(s => { const p = cleanProj(s.project); projCost[p] = (projCost[p] || 0) + (s.cost || 0); });
   const projs = Object.keys(byProj).sort((a, b) => byProj[b] - byProj[a]).slice(0, 14);
   const maxP = Math.max(...projs.map(p => byProj[p]), 1e-9);
   $('#uprojects').innerHTML = projs.length ? projs.map(p =>
     `<div class="urow click" data-uproj="${esc(p)}" title="Filter board to ${esc(p)}"><span class="n">${esc(p)}</span>
       <div class="utrack" style="background:none"><i style="width:${byProj[p] / maxP * 100}%;background:var(--tag)"></i></div>
-      <span class="x">${hasUsd ? usd(projCost[p]) : fmtN(byProj[p])}</span></div>`
+      <span class="x">${usageAmount(S.filter(s => cleanProj(s.project) === p))}</span></div>`
   ).join('') : '<p class="note">no projects</p>';
   $$('[data-uproj]').forEach(row => row.onclick = () => {
     $('#proj-sel').value = row.dataset.uproj;

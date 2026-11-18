@@ -1,0 +1,31 @@
+{
+  "checked_at": "2026-11-18T01:15:41.544974-03:00",
+  "port": 8774,
+  "http_routes_ok": [
+    "/",
+    "/flow.json",
+    "/graph.json?hours=168"
+  ],
+  "camera": {
+    "attempts": 3,
+    "explicit_verify_failures": 0
+  },
+  "r1": {
+    "attempts": 2,
+    "explicit_verify_failures": 0
+  },
+  "coordinator": {
+    "rollouts": 6,
+    "independent_local_counters": true,
+    "tokens": 48220185,
+    "unique_usage_events": 371,
+    "served_counters_match_sources": true
+  },
+  "sha256": {
+    "loop-status.py": "472f66534a55e9c5ca65235f802a9b730c5c6bbff7bc125f16b0af81f095b721",
+    "loop-status.html": "dfa23f5ffb157c4b239b3da101ec3348871ddc58fde456588084eb7915395487",
+    "test_loop_status.py": "a8165e60d35d4dd2eb49f18eebfd140c47ce0a3104d77407b42ff3b37782f05e",
+    "test_usage.js": "491b4c0374fef01af3f324398a07ec0ed99d1f6a756800410c24fc5534feedab"
+  },
+  "privacy": "No transcripts, session IDs, prompts or source paths are exported."
+}

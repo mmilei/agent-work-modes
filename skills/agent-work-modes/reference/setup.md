@@ -224,8 +224,10 @@ tabs and a global Project selector (scoped to the active project by default, wit
 2. **Sessions & Graph**: live tree of every Claude Code, Codex, and Hermes session on this machine, indented under the
    session that launched it (four or more of a kind fold into one row), with time bars, `SendMessage` chips,
    `ctx_start → ctx_peak`, cache rewrites, and a session inspector on click.
-3. **Usage & Spend**: spend by work mode (`processed/output` ratio), spend per day and hour of day, spend by project,
+3. **Usage & Spend**: tokens by work mode (`processed/output` ratio), tokens per day and hour of day, tokens by project,
    and the most expensive / highest-rewrite sessions table (clicking a row jumps to that session in `Sessions & Graph`).
+   Usage totals show tokens first, followed by `(estimated price)` only when every included session has a known price.
+   Steering share and chart sizes use tokens, including sessions without a price.
 
 It reads files and rebuilds on every request, so it costs the watching session nothing. `--no-cost` skips the background
 ccusage run that prices Claude sessions. Python standard library only, no external browser requests.
@@ -276,6 +278,11 @@ starting a new authorized stage; never reset it to evade a cap. The printed `log
 Unpriced spend and subscription
 quota remain unavailable. Consult the actual files/DB before accepting missing telemetry; if still unavailable,
 stop new dispatches and let the user choose a bounded continuation. Completed work remains valid.
+
+Codex can write several rollouts for one logical chat. Their counters are combined only when each file's totals
+are explained by its own `last_token_usage` events; copied events are counted once. Source counters remain in the
+local checkpoint log so growth in another rollout cannot hide a decrease or a missing source. Ambiguous segments
+and older baselines without per-rollout coverage stop dispatch; do not reset the budget to bypass that stop.
 
 Exit **0** permits the next dispatch within the agreed scope. Exit **2** means stop: missing budget/telemetry,
 decreasing counters, or an exhausted limit. `on_limit: warn` does not bypass this native gate. Inspect the reason
@@ -343,10 +350,12 @@ Formats it reads:
 
 - `LOOP-STATE.md`: a table `| # | Item | Depends | State | Tries |`. Column order comes from the header row
   (3-column tables without Depends/Tries default missing tries to 0).
+  `Tries` counts attempts, not failed checks. Extra attempts alone never imply a failed VERIFY.
   States: `todo`, `done`, `BLOCKED...`; the first
   `todo` whose dependencies are done is shown as in progress.
 - `LOOP-HISTORY.md`: one entry per event, `### YYYY-MM-DD HH:MM — item N: title`, then the evidence text. A title with
   `BLOCKED` is a block; one with `unblocked` or `relaunched` is an unblock; anything else counts as done.
+  An explicit `VERIFY: FAIL` (or `VERIFY: FAILED`) line records a failed check for that item. Review returns alone do not.
 - `result*.json` in the loop folder: the JSON of a `claude -p --output-format json` run, for the spend card.
 
 Routes: `/` and `/history` unified board · `/flow.json`, `/history.json`, `/graph.json?hours=N` data · `GET/POST /chat`, `POST /config` · `/shots/<file>` screenshots from `--screenshots`.

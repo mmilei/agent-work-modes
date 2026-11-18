@@ -129,6 +129,16 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
    available usage and elapsed time, with their source; consult the available source before declaring data missing. API-price estimates
   are not subscription-quota percentages. Commit the work in the project's own repo, never in the orchestrator's repo.
 
+- **Looks-like-a-reference items.** When an item's success is "it resembles this image" (a character, a screen, a
+  layout), numeric gates (dimensions, proportions, atlas bounds, build and import) do not establish it: an overnight
+  loop once closed sixteen such items that passed every measurement and bore no resemblance to the reference. Give
+  these items a visual VERIFY: a capture taken from the reference's own camera and framing, placed side by side with
+  the reference, judged by a separate reviewer against a PASS/FAIL checklist written before the work (the items the
+  reference makes obvious: colors, silhouette, hair, clothing, expression). A reviewer that never saw the work
+  being done and a stronger model than the workers fit this role. Mark the item `done` only on PASS. Make the first
+  such item a single hero unit with a round cap, and stop for human approval of it before multiplying variants:
+  variants built on a rejected base are all wasted.
+
 Use the first real representative unit as the setup proof; keep its work and count every attempted round within
 the agreed total cap. Check the unit's requested behavior and the permissions actually exercised, not just the
 build. If the unit fails, required permissions are denied, or the evidence does not establish its behavior, stop

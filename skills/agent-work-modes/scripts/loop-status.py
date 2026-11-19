@@ -321,6 +321,8 @@ def flow_data():
     its, current = items()
     by = {it["id"]: it for it in its}
     ev = loop_events(LOOP)
+    cfg = loop_config()
+    esc = escalation_policy(cfg)
     for it in its:
         it["waits"] = [d for d in it["deps"] if by.get(d, {}).get("kind") != "done"]
         if it["kind"] == "todo" and it["waits"]:
@@ -335,11 +337,30 @@ def flow_data():
                     for e in ev if e["id"] == it["id"]]
         it["verify_failures"] = sum(bool(re.search(r"^VERIFY:\s*FAIL(?:ED)?\b", e["body"], re.I | re.M))
                                     for e in it["ev"])
+        it["review_rejections"] = sum(bool(re.search(r"^REVIEW:\s*REJECT(?:ED)?\b", e["body"], re.I | re.M))
+                                      for e in it["ev"])
+        it["escalations"] = [m.group(1).strip() for e in it["ev"]
+                             for m in re.finditer(r"^ESCALATED:\s*(.+)$", e["body"], re.I | re.M)]
+        it["escalated"] = bool(it["escalations"])
+        it["escalation_pending"] = (
+            it["kind"] not in ("done", "blocked", "gate")
+            and esc["mode"] == "ask" and esc["after"] >= 1 and bool(esc["model"])
+            and it["review_rejections"] >= esc["after"]
+            and len(it["escalations"]) < esc["max_tries"]
+        )
+    esc_items = [it for it in its if it["escalated"]]
+    esc_summary = {
+        **esc,
+        "items": len(esc_items),
+        "pending": sum(1 for it in its if it["escalation_pending"]),
+        "done": sum(1 for it in esc_items if it["kind"] == "done"),
+        "blocked": sum(1 for it in esc_items if it["kind"] == "blocked"),
+    }
     log, usage_txt = read(Path(args.log)) if args.log else "", read(LOOP / "LOOP-USAGE.md")
     rounds = re.findall(r"fresh-loop: round (\d+)/(\d+)", log)
     usage = re.findall(r"^- \[(\d\d:\d\d)\] (.*)$", usage_txt, re.M)
-    cap = (loop_config() or {}).get("rounds") or (rounds[-1][1] if rounds else
-                                                  (re.findall(r"\bcap (\d+)", read(LOOP / "LOOP-STATE.md") + usage_txt) or [0])[0])
+    cap = (cfg or {}).get("rounds") or (rounds[-1][1] if rounds else
+                                        (re.findall(r"\bcap (\d+)", read(LOOP / "LOOP-STATE.md") + usage_txt) or [0])[0])
     day = (re.findall(r"\d{4}-\d\d-\d\d", usage_txt) or [datetime.now().strftime("%Y-%m-%d")])[0]
     stream = [{"t": f"{day}T{hm}", "kind": "usage", "text": line} for hm, line in usage]
     stream += [{"t": e["t"].strftime(FMT), "kind": "round", "text": f"item {e['id']}: {e['name']}"} for e in ev]
@@ -359,7 +380,7 @@ def flow_data():
            "last": datetime.fromtimestamp(tr[0].stat().st_mtime).strftime("%H:%M:%S") if tr else ""}
     return {"title": TITLE, "loop": LOOP.name, "now": datetime.now().strftime("%H:%M:%S"), "items": its,
             "current": current, "round": rnd, "execution": execution, "spend": result_spend(LOOP),
-            "limits": None if execution else loop_config(),
+            "limits": None if execution else cfg, "escalation": esc_summary,
             "tokens": sum(int(x.replace(",", "")) for _, line in usage for x in re.findall(r"(\d[\d,]*) ?tok", line)),
             "usd": sum(float(x.replace(",", "")) for _, line in usage for x in re.findall(r"\$(\d[\d,]*(?:\.\d+)?)", line)),
             "usage": [{"t": hm, "text": line} for hm, line in usage],
@@ -369,7 +390,30 @@ def flow_data():
 
 CONFIG = "loop-config.json"
 CONFIG_FIELDS = {"rounds": (int, 1), "max_tokens": (int, 0), "max_usd": ((int, float), 0),
-                 "max_orchestrator_tokens": (int, 0), "max_minutes": ((int, float), 0)}
+                 "max_orchestrator_tokens": (int, 0), "max_minutes": ((int, float), 0),
+                 "escalate_after": (int, 0), "escalate_max_tries": (int, 1)}
+ESCALATE_DEFAULTS = {"escalate_mode": "off", "escalate_after": 0, "escalate_model": "",
+                     "escalate_effort": "", "escalate_max_tries": 1, "escalate_reset": True}
+
+
+def escalation_policy(cfg):
+    raw = {**ESCALATE_DEFAULTS, **(cfg or {})}
+    mode = raw["escalate_mode"] if raw["escalate_mode"] in ("off", "ask", "auto") else "off"
+    after = raw["escalate_after"] if isinstance(raw["escalate_after"], int) and not isinstance(raw["escalate_after"], bool) and raw["escalate_after"] >= 0 else 0
+    model = raw["escalate_model"] if isinstance(raw["escalate_model"], str) else ""
+    effort = raw["escalate_effort"] if isinstance(raw["escalate_effort"], str) else ""
+    max_tries = raw["escalate_max_tries"] if isinstance(raw["escalate_max_tries"], int) and not isinstance(raw["escalate_max_tries"], bool) and raw["escalate_max_tries"] >= 1 else 1
+    reset = raw["escalate_reset"] if isinstance(raw["escalate_reset"], bool) else True
+    if mode == "off":
+        preset = "off"
+    elif mode == "ask" and after == 2 and max_tries == 1 and reset and not effort:
+        preset = "light"
+    elif mode == "auto" and after == 2 and max_tries == 1 and reset and not effort:
+        preset = "auto"
+    else:
+        preset = "custom"
+    return {"mode": mode, "after": after, "model": model, "effort": effort,
+            "max_tries": max_tries, "reset": reset, "preset": preset}
 
 
 def loop_config():
@@ -400,7 +444,13 @@ def set_config(raw):
         elif k == "on_limit":
             if v not in ("stop", "warn"):
                 raise ValueError("on_limit: expected stop or warn")
-        elif k in ("model", "effort"):
+        elif k == "escalate_mode":
+            if v not in ("off", "ask", "auto"):
+                raise ValueError("escalate_mode: expected off, ask or auto")
+        elif k == "escalate_reset":
+            if not isinstance(v, bool):
+                raise ValueError("escalate_reset: expected a boolean")
+        elif k in ("model", "effort", "escalate_model", "escalate_effort"):
             if not (isinstance(v, str) and re.fullmatch(r"[\w.\[\]-]{0,40}", v)):
                 raise ValueError(f"{k}: expected a short model or effort name")
         else:
@@ -408,6 +458,9 @@ def set_config(raw):
         clean[k] = v
     with CHAT_LOCK:
         cfg = {**(loop_config() or {}), **clean}
+        esc = escalation_policy(cfg)
+        if esc["mode"] in ("ask", "auto") and (esc["after"] < 1 or not esc["model"]):
+            raise ValueError("escalate_mode ask/auto requires escalate_after >= 1 and escalate_model")
         tmp = LOOP / (CONFIG + ".tmp")
         tmp.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
         os.replace(tmp, LOOP / CONFIG)  # the driver never sees a half-written file

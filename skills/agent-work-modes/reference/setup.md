@@ -77,6 +77,8 @@ model: <haiku|sonnet|opus>
 Ask for a short answer: verdict, revision, commands/exit codes, evidence paths and unresolved issues. Exploration
 and full logs stay in the worker/files. Read only the excerpts needed for the next decision, never dump full files,
 transcripts or diffs into the orchestrator by routine. Preserve independent review and real technical/visual gates.
+When pairing a cheaper worker subagent with a stronger reviewer, you may also offer the opt-in worker-escalation
+policy below ("Worker escalation (opt-in, off by default)"); keep it off unless the user selects it.
 
 The built-in Explore subagent runs on the session model (on Opus when the session runs Fable with a subscription).
 To pin it, define an agent of your own with `model:` in its frontmatter, or pass `model` per invocation.
@@ -118,6 +120,23 @@ Agree these with the user and write them at the top of `LOOP-STATE.md`, before t
   work may suit a cheaper model (for example Haiku or Sonnet); difficult judgement may justify a stronger one
   (for example Opus). Agree changes before dispatch, rather than always choosing the newest version. Use effort
   controls only where supported; do not assume per-call control. Record the actual model when available.
+- **Worker escalation (opt-in, off by default).** Only offer this when the run pairs a cheaper worker with a stronger
+  reviewer, and state up front that whether it pays off depends on the provider and model pair (measure before making
+  it a habit). Never turn it on by default. Offer four choices:
+  - **Off (default):** no escalation (`escalate_mode: "off"`, `escalate_after: 0`).
+  - **Light (`ask`):** after `2` reviewer rejections on the same item, pause and ask before promoting the worker to
+    the reviewer's model (`escalate_mode: "ask"`, `escalate_after: 2`, `escalate_max_tries: 1`, `escalate_reset: true`).
+  - **Auto (`auto`):** after `2` reviewer rejections on the same item, automatically promote the worker to the
+    escalated model for up to `1` round, then reset to the base model on the next item (`escalate_mode: "auto"`,
+    `escalate_after: 2`, `escalate_max_tries: 1`, `escalate_reset: true`).
+  - **Custom:** set every field in `loop-config.json` (`escalate_mode`, `escalate_after`, `escalate_model`,
+    `escalate_effort`, `escalate_max_tries`, `escalate_reset`).
+  Always escalate on a **clean cut** (new session/subagent receiving only the item contract, latest diff, and the
+  reviewer's rejections — never the failed conversation). If the reviewer model becomes the worker and no deterministic
+  `VERIFY` closes the item, note that the independent second pair of eyes is gone and a human check closes it. Record
+  reviewer rejections with `REVIEW: REJECT` (or `REVIEW: REJECTED`) and escalations with
+  `ESCALATED: <from> -> <to> after <N> reviewer rejections` in `LOOP-HISTORY.md` so the board tracks whether
+  escalated items finish `done` or `BLOCKED`.
 - **Dispatch.** Launch the loop only on a verbal OK from the user. Claude starts it; the user does not paste a
   launch block. Include in that OK whether a successful first unit permits unattended continuation within the
   unchanged scope and remaining cap, or whether the user wants to review it first.
@@ -356,6 +375,8 @@ Formats it reads:
 - `LOOP-HISTORY.md`: one entry per event, `### YYYY-MM-DD HH:MM — item N: title`, then the evidence text. A title with
   `BLOCKED` is a block; one with `unblocked` or `relaunched` is an unblock; anything else counts as done.
   An explicit `VERIFY: FAIL` (or `VERIFY: FAILED`) line records a failed check for that item. Review returns alone do not.
+  An explicit `REVIEW: REJECT` (or `REVIEW: REJECTED`) line counts a reviewer rejection for opt-in worker escalation,
+  and an `ESCALATED: <from> -> <to> ...` line records an escalation so the board can show escalated items and outcomes.
 - `result*.json` in the loop folder: the JSON of a `claude -p --output-format json` run, for the spend card.
 
 Routes: `/` and `/history` unified board · `/flow.json`, `/history.json`, `/graph.json?hours=N` data · `GET/POST /chat`, `POST /config` · `/shots/<file>` screenshots from `--screenshots`.

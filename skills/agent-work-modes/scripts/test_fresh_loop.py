@@ -19,7 +19,7 @@ def state(*statuses):
     return head + "".join(f"| {i} | item - VERIFY: check | - | {s} | 0 |\n" for i, s in enumerate(statuses, 1))
 
 
-def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0, flags=(), measured="", past=(), config=None):
+def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0, flags=(), measured="", past=(), config=None, history=""):
     rounds, checks = [], []
 
     def command(cmd, **kwargs):
@@ -38,7 +38,9 @@ def run(before, after=None, *, cap="3", passes=False, stop=False, session_code=0
 
     def read(path, **kwargs):
         if path.name == "loop-config.json":
-            return json.dumps(config) if config else "{}"
+            return json.dumps(config) if config else WRITTEN.get("loop-config.json", "{}")
+        if path.name == "LOOP-HISTORY.md":
+            return WRITTEN.get("LOOP-HISTORY.md", history)
         if path.name.startswith("result-"):
             return WRITTEN.get(path.name, RESULT)
         if path.name == "LOOP-STATE.md":
@@ -121,8 +123,11 @@ assert not [k for k in WRITTEN if k.startswith("result-")], "only the claude CLI
 
 # limits: written at start, re-read each round, stop or warn
 run(state("todo"), cap="2", flags=["--model", "haiku", "--effort", "low", "--max-usd", "9"])
-assert json.loads(WRITTEN["loop-config.json"]) == {"rounds": 2, "max_tokens": 0, "max_usd": 9.0, "on_limit": "stop",
-                                                   "model": "haiku", "effort": "low"}, "config is written from the flags"
+assert json.loads(WRITTEN["loop-config.json"]) == {
+    "rounds": 2, "max_tokens": 0, "max_usd": 9.0, "on_limit": "stop", "model": "haiku", "effort": "low",
+    "escalate_mode": "off", "escalate_after": 0, "escalate_model": "", "escalate_effort": "",
+    "escalate_max_tries": 1, "escalate_reset": True,
+}, "config is written from the flags with worker escalation off by default"
 assert LAST[0][-4:] == ["--model", "haiku", "--effort", "low"], "model and effort reach the round, after the extra args"
 code, rounds, _, output = run(state("todo"), cap="5", past=[1], flags=["--max-tokens", "200"])
 assert code == 1 and rounds == 0 and "limit reached" in output, "a spent token cap stops before the next round (cache reads excluded: 200 tokens)"
@@ -133,4 +138,55 @@ assert code == 0 and rounds == 1 and "WARNING over limit" in output, "warn mode 
 code, rounds, _, _ = run(state("todo"), cap="1", config={"rounds": 3, "max_tokens": 0, "max_usd": 0, "on_limit": "stop",
                                                           "model": "opus", "effort": ""})
 assert rounds == 3 and "opus" in LAST[0], "the live config wins over the flags"
+
+# opt-in worker escalation: off by default, ask pauses, auto promotes + resets (or sticks), capped by max_tries
+two_rejects = (
+    "### 2026-11-18 10:00 - item 1: attempt 1\nREVIEW: REJECT\nmissing edge case\n"
+    "### 2026-11-18 10:10 - item 1: attempt 2\nREVIEW: REJECTED\nstill failing boundary\n"
+)
+one_reject = "### 2026-11-18 10:00 - item 1: attempt 1\nREVIEW: REJECT\nneeds fix\n"
+code, rounds, _, _ = run(state("todo"), cap="1", flags=["--model", "haiku"], history=two_rejects)
+assert rounds == 1 and LAST[0][-2:] == ["--model", "haiku"] and "LOOP-HISTORY.md" not in WRITTEN, "escalation stays off by default"
+for bad_flags in (["--escalate-mode", "auto"], ["--escalate-mode", "ask", "--escalate-after", "2"],
+                  ["--escalate-mode", "auto", "--escalate-model", "sonnet"], ["--escalate-max-tries", "0"]):
+    code, rounds, _, _ = run(state("todo"), cap="1", flags=bad_flags)
+    assert code == 2 and rounds == 0, f"invalid escalation flags must fail: {bad_flags}"
+
+# Light (ask): runs below threshold, stops for approval once threshold is hit
+code, rounds, _, _ = run(state("todo"), cap="1", history=one_reject,
+                         flags=["--model", "haiku", "--escalate-mode", "ask", "--escalate-after", "2", "--escalate-model", "sonnet"])
+assert rounds == 1 and LAST[0][-2:] == ["--model", "haiku"], "below rejection threshold keeps base model"
+code, rounds, _, output = run(state("todo"), cap="1", history=two_rejects,
+                              flags=["--model", "haiku", "--escalate-mode", "ask", "--escalate-after", "2", "--escalate-model", "sonnet"])
+assert code and rounds == 0 and "approve escalation to sonnet" in str(code), "ask mode stops for human approval"
+
+# Auto: promotes current item, records ESCALATED in LOOP-HISTORY.md, and resets to base model on next item
+code, rounds, _, output = run(state("todo", "todo"), state("done (abc1234)", "todo"), cap="2", history=two_rejects,
+                              flags=["--model", "haiku", "--effort", "low", "--escalate-mode", "auto",
+                                     "--escalate-after", "2", "--escalate-model", "sonnet", "--escalate-effort", "medium"])
+assert rounds == 2 and LAST[0][-4:] == ["--model", "sonnet", "--effort", "medium"], f"round 1 must escalate: {LAST}"
+assert LAST[1][-4:] == ["--model", "haiku", "--effort", "low"], f"round 2 on item 2 must reset to base model: {LAST}"
+assert "ESCALATED: haiku -> sonnet after 2 reviewer rejections" in WRITTEN.get("LOOP-HISTORY.md", ""), WRITTEN
+
+# Sticky mode keeps the escalated model on subsequent items, while still enforcing max_tries on the same item
+code, rounds, _, _ = run(state("todo", "todo"), state("done", "todo"), cap="2", history=two_rejects,
+                         flags=["--model", "haiku", "--escalate-mode", "auto", "--escalate-after", "2",
+                                "--escalate-model", "sonnet", "--escalate-sticky"])
+assert rounds == 2 and LAST[0][-2:] == ["--model", "sonnet"] and LAST[1][-2:] == ["--model", "sonnet"], LAST
+code, rounds, _, _ = run(state("todo"), cap="3", history=two_rejects,
+                         flags=["--model", "haiku", "--escalate-mode", "auto", "--escalate-after", "2",
+                                "--escalate-model", "sonnet", "--escalate-max-tries", "1", "--escalate-sticky"])
+assert code and rounds == 1 and "escalate_max_tries" in str(code), (code, rounds)
+
+# Reaching escalate_max_tries stops instead of looping on the expensive model
+already_escalated = two_rejects + "### 2026-11-18 10:20 - item 1: escalated to sonnet\nESCALATED: haiku -> sonnet after 2 reviewer rejections\n"
+code, rounds, _, _ = run(state("todo"), cap="2", history=already_escalated,
+                         flags=["--model", "haiku", "--escalate-mode", "auto", "--escalate-after", "2",
+                                "--escalate-model", "sonnet", "--escalate-max-tries", "1"])
+assert code and rounds == 0 and "escalate_max_tries" in str(code), code
+
+# Non-claude CLI refuses automatic --model injection instead of inventing flags
+code, rounds, _, _ = run(state("todo"), cap="1", history=two_rejects,
+                         flags=["--cli", "codex exec", "--escalate-mode", "auto", "--escalate-after", "2", "--escalate-model", "sonnet"])
+assert code and rounds == 0 and "only supports the claude CLI" in str(code), code
 print("ok")

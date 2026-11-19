@@ -433,6 +433,107 @@ def test_codex_rollout_counters():
         assert status == 2 and any("telemetry" in r for r in record["reasons"]), record
 
 
+def test_worker_escalation_config_and_flow():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        loop = Path(tmp)
+        m.LOOP = loop
+        m.args.snapshot = True
+        (loop / "LOOP-STATE.md").write_text(
+            "| # | Item | Depends | State | Tries |\n|---|------|---------|-------|-------|\n"
+            "| 1 | Escalated and done | - | done | 3 |\n"
+            "| 2 | Awaiting ask approval | 1 | todo | 2 |\n"
+            "| 3 | Escalated then blocked | 1 | BLOCKED: failed twice | 3 |\n", encoding="utf-8")
+        (loop / "LOOP-HISTORY.md").write_text(
+            "### 2026-11-18 10:00 - item 1: try 1\nREVIEW: REJECT\nmissing tests\n"
+            "### 2026-11-18 10:10 - item 1: try 2\nREVIEW: REJECTED\nstill broken\n"
+            "### 2026-11-18 10:20 - item 1: escalated to sonnet\nESCALATED: haiku -> sonnet after 2 reviewer rejections\n"
+            "### 2026-11-18 10:30 - item 1: done\nVERIFY: PASS\n"
+            "### 2026-11-18 10:40 - item 2: try 1\nREVIEW: REJECT\nneeds cleanup\n"
+            "### 2026-11-18 10:50 - item 2: try 2\nREVIEW: REJECT\nstill off\n"
+            "### 2026-11-18 11:00 - item 3: escalated to sonnet\nESCALATED: haiku -> sonnet after 2 reviewer rejections\n"
+            "### 2026-11-18 11:10 - item 3: BLOCKED\nVERIFY: FAIL\n", encoding="utf-8")
+
+        # Default off when no config exists
+        flow_off = m.flow_data()
+        assert flow_off["escalation"]["mode"] == "off" and flow_off["escalation"]["preset"] == "off"
+        assert flow_off["escalation"]["items"] == 2 and flow_off["escalation"]["done"] == 1
+        assert flow_off["escalation"]["blocked"] == 1 and flow_off["escalation"]["pending"] == 0
+
+        # Light preset (ask after 2) marks item #2 as awaiting approval
+        (loop / "loop-config.json").write_text(json.dumps({"rounds": 6, "max_tokens": 0, "max_usd": 0, "on_limit": "stop",
+                                                           "model": "haiku", "effort": ""}), encoding="utf-8")
+        m.set_config(json.dumps({"escalate_mode": "ask", "escalate_after": 2, "escalate_model": "sonnet",
+                                 "escalate_effort": "", "escalate_max_tries": 1, "escalate_reset": True}))
+        flow_ask = m.flow_data()
+        assert flow_ask["escalation"]["preset"] == "light" and flow_ask["escalation"]["pending"] == 1
+        by = {i["id"]: i for i in flow_ask["items"]}
+        assert by["1"]["escalated"] and by["1"]["review_rejections"] == 2
+        assert by["2"]["escalation_pending"] and not by["2"]["escalated"]
+        assert by["3"]["escalated"] and not by["3"]["escalation_pending"]
+
+        # Auto preset & Custom preset via set_config
+        m.set_config(json.dumps({"escalate_mode": "auto"}))
+        assert m.flow_data()["escalation"]["preset"] == "auto"
+        m.set_config(json.dumps({"escalate_after": 3, "escalate_effort": "medium", "escalate_max_tries": 2, "escalate_reset": False}))
+        flow_custom = m.flow_data()
+        assert flow_custom["escalation"]["preset"] == "custom" and flow_custom["escalation"]["effort"] == "medium"
+        assert flow_custom["escalation"]["max_tries"] == 2 and flow_custom["escalation"]["reset"] is False
+
+        # Reject invalid escalation payloads
+        for bad in (
+            {"escalate_mode": "maybe"},
+            {"escalate_after": -1},
+            {"escalate_max_tries": 0},
+            {"escalate_reset": "true"},
+            {"escalate_model": "bad;cmd"},
+            {"escalate_mode": "ask", "escalate_after": 0},
+            {"escalate_mode": "auto", "escalate_model": ""},
+        ):
+            try:
+                m.set_config(json.dumps(bad))
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"must reject invalid escalation config: {bad}")
+
+        # Turning off clears active mode without requiring a model
+        m.set_config(json.dumps({"escalate_mode": "off", "escalate_after": 0, "escalate_model": ""}))
+        assert m.flow_data()["escalation"]["mode"] == "off"
+
+        # Native mode keeps limits hidden while exposing read-only escalation policy
+        (loop / "loop-config.json").write_text(json.dumps({
+            "execution": {"mode": "native", "harness": "Codex", "provider": "OpenAI", "session": "s1",
+                          "status": "running", "stage": "Work", "updated_at": "2026-11-18T00:00:00Z"},
+            "escalate_mode": "ask", "escalate_after": 2, "escalate_model": "sonnet",
+            "escalate_effort": "", "escalate_max_tries": 1, "escalate_reset": True,
+        }), encoding="utf-8")
+        flow_native = m.flow_data()
+        assert flow_native["limits"] is None and flow_native["escalation"]["preset"] == "light"
+
+        # Verify client script syntax and escalation helper behavior in Node
+        js_out = subprocess.check_output([
+            "node", "-e",
+            "const fs=require('node:fs'),vm=require('node:vm');"
+            "const html=fs.readFileSync(process.argv[1],'utf8');"
+            "const script=html.match(/<script>([\\s\\S]*?)<\\/script>/)[1];"
+            "new vm.Script(script);"
+            "vm.runInThisContext(html.match(/function escalationPresetOf\\([^]*?\\n}/)[0]);"
+            "vm.runInThisContext(html.match(/function escalationLabel\\([^]*?\\n}/)[0]);"
+            "console.log(JSON.stringify(["
+            "escalationPresetOf({escalate_mode:'off',escalate_after:0}),"
+            "escalationPresetOf({escalate_mode:'ask',escalate_after:2,escalate_max_tries:1,escalate_reset:true}),"
+            "escalationPresetOf({escalate_mode:'auto',escalate_after:2,escalate_max_tries:1,escalate_reset:true}),"
+            "escalationPresetOf({escalate_mode:'auto',escalate_after:3,escalate_max_tries:2,escalate_reset:false}),"
+            "escalationLabel({escalated:true,escalations:['haiku -> sonnet']}),"
+            "escalationLabel({escalated:false,escalation_pending:true,review_rejections:2})"
+            "]));",
+            str(Path(SCRIPT).with_suffix(".html"))], text=True)
+        assert json.loads(js_out) == [
+            "off", "light", "auto", "custom", "↑ escalated", "↑ escalate? (2 review rejections)"
+        ], js_out
+
+
 if __name__ == "__main__":
     test_review_attempts_are_not_verify_failures()
     test_codex_rollout_counters()
@@ -443,4 +544,6 @@ if __name__ == "__main__":
     test_session_graph()
     test_loop_dirs_isolation()
     test_items_three_columns()
+    test_state_note_in_parentheses_keeps_the_state()
+    test_worker_escalation_config_and_flow()
     print("ok")

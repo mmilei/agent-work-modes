@@ -160,6 +160,10 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .pb .l{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
 .pb .l b{font:600 12px var(--mono);color:var(--chalk);text-transform:none;letter-spacing:0}
 .pb input,.pb select{width:100%;margin-top:6px;background:var(--bg2);color:var(--chalk);border:1px solid var(--line2);border-radius:7px;padding:5px 8px;font:inherit}
+.limsep{border-top:1px solid var(--line);margin:14px 0 10px;padding-top:12px}
+.limsub{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.limsub b{font:600 12px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--chalk)}
+.limsub span{color:var(--dim);font-size:11.5px}
 #limsave{margin-top:12px;background:var(--accent);color:#0a0f0c;border:0;border-radius:8px;padding:6px 14px;font:600 13px Inter,sans-serif;cursor:pointer}
 .pb .track{height:10px;background:var(--line);border-radius:5px;overflow:hidden;display:flex;margin-top:7px}
 .pb .track i{display:block;height:100%}
@@ -835,6 +839,25 @@ async function loadFlow() {
   updateBadges();
 }
 
+function escalationBar(pb) {
+  const E = F.escalation;
+  if (!E || (E.mode === 'off' && !E.items && !E.pending)) return '';
+  const parts = [];
+  if (E.mode !== 'off') parts.push(`${E.preset}${E.model ? ' → ' + E.model : ''}`);
+  parts.push(`${E.items} escalated`);
+  if (E.items) parts.push(`${E.done} done · ${E.blocked} blocked`);
+  if (E.pending) parts.push(`${E.pending} awaiting ok`);
+  const tot = Math.max(E.items + E.pending, 1);
+  const inProg = Math.max(E.items - E.done - E.blocked, 0);
+  const segs = E.items || E.pending ? [
+    [E.done, C.done, `done after escalation: ${E.done}`],
+    [inProg, C.tag, `in progress after escalation: ${inProg}`],
+    [E.pending, C.unblocked, `awaiting escalation approval: ${E.pending}`],
+    [E.blocked, C.blocked, `blocked after escalation: ${E.blocked}`]
+  ].filter(s => s[0]).map(([v, c, tip]) => `<i title="${esc(tip)}" style="width:${v / tot * 100}%;background:${c}"></i>`).join('') : '';
+  return pb('Worker escalation', esc(parts.join(' · ')), `<div class="track">${segs}</div>`);
+}
+
 function bars() {
   const its = F.items, n = its.length || 1, cnt = k => its.filter(i => i.kind === k).length, R = F.round, sp = F.spend;
   const pb = (l, v, body) => `<div class="pb"><div class="l">${l}<b>${v}</b></div>${body}</div>`;
@@ -849,29 +872,109 @@ function bars() {
     pb('Tries per item', `${its.reduce((a, i) => a + +i.tries, 0)} total · ${its.filter(i => +i.retries).length} retried`, `<div class="tries">${tries}</div>`) +
     pb('Tokens (usage lines)', F.tokens ? num(F.tokens) : 'none logged', `<div class="track">${tok.map(([u, t], i) => `<i title="${esc(u.t)} · ${num(t)} tokens · ${esc(u.text)}" style="width:${t / F.tokens * 100}%;background:${shade(i)}"></i>`).join('')}</div>`) +
     pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'unknown', `<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`) +
+    escalationBar(pb) +
     steer(sp ? sp.usd : F.usd || 0, pb);
 }
 
+function escalationPresetOf(cfg) {
+  const m = cfg.escalate_mode || 'off', after = +cfg.escalate_after || 0, max = +cfg.escalate_max_tries || 1;
+  const reset = cfg.escalate_reset !== false, eff = (cfg.escalate_effort || '').trim();
+  if (m === 'off') return 'off';
+  if (m === 'ask' && after === 2 && max === 1 && reset && !eff) return 'light';
+  if (m === 'auto' && after === 2 && max === 1 && reset && !eff) return 'auto';
+  return 'custom';
+}
+
 function limits() {
-  const el = $('#limits'), L = F.limits, sp = F.spend || {tokens: 0, usd: 0};
+  const el = $('#limits'), L = F.limits, sp = F.spend || {tokens: 0, usd: 0}, E = F.escalation;
   if (el.contains(document.activeElement) && document.activeElement.tagName !== 'BODY') return;
   el.previousElementSibling.querySelector('small').textContent = F.execution ? 'managed by the native orchestrator' : 'fresh-loop.py re-reads them before every round';
-  if (F.execution) { el.innerHTML = '<span class="note">Native orchestration: limits are managed by the orchestrator. Token quota and cost are unknown unless measured.</span>'; return; }
+  if (F.execution) {
+    const escNote = E && E.mode !== 'off'
+      ? `<div class="limsep"><div class="limsub"><b>Worker escalation (opt-in · ${esc(E.preset)})</b><span>read-only · measure per provider</span></div>
+         <div class="note" style="margin-top:0;color:var(--chalk)">${esc(E.mode)} after ${E.after} reviewer rejections → <code>${esc(E.model || 'unset')}</code>${E.effort ? ` (${esc(E.effort)})` : ''} · max ${E.max_tries}/item · ${E.reset ? 'reset per item' : 'sticky'}</div></div>`
+      : '';
+    el.innerHTML = '<span class="note">Native orchestration: limits are managed by the orchestrator. Token quota and cost are unknown unless measured.</span>' + escNote;
+    return;
+  }
   if (!L) { el.innerHTML = '<span class="note">no loop-config.json yet: fresh-loop.py writes it when it starts</span>'; return; }
   const ro = window.SNAPSHOT ? ' disabled' : '';
   const over = {rounds: F.round.n >= L.rounds, max_tokens: L.max_tokens && sp.tokens >= L.max_tokens, max_usd: L.max_usd && sp.usd >= L.max_usd};
   const f = (k, label, used, step) => `<label class="pb"><div class="l">${label}<b style="color:${over[k] ? C.blocked : 'inherit'}">${used}${over[k] ? ' · over' : ''}</b></div>
     <input data-k="${k}" type="number" min="${k === 'rounds' ? 1 : 0}" step="${step}" value="${L[k]}"${ro}></label>`;
-  const t = (k, label) => `<label class="pb"><div class="l">${label}</div><input data-k="${k}" type="text" value="${esc(L[k] || '')}" placeholder="default"${ro}></label>`;
+  const t = (k, label, ph = 'default') => `<label class="pb"><div class="l">${label}</div><input data-k="${k}" type="text" value="${esc(L[k] || '')}" placeholder="${ph}"${ro}></label>`;
+  const escMode = L.escalate_mode || 'off', escAfter = L.escalate_after ?? 0, escMax = L.escalate_max_tries ?? 1;
+  const escReset = L.escalate_reset !== false;
+  const preset = escalationPresetOf({escalate_mode: escMode, escalate_after: escAfter, escalate_max_tries: escMax,
+    escalate_reset: escReset, escalate_effort: L.escalate_effort || ''});
   el.innerHTML = `<div class="bars">${f('rounds', 'Rounds', F.round.n + ' used', 1)}${f('max_tokens', 'Max tokens (0 = none)', num(sp.tokens) + ' used', 1000)}${f('max_usd', 'Max USD (0 = none)', '$' + num(sp.usd, 2) + ' used', 0.5)}
     ${t('model', 'Model')}${t('effort', 'Effort')}
     <label class="pb"><div class="l">At a cap</div><select data-k="on_limit"${ro}><option value="stop">stop the loop</option><option value="warn">only warn (red)</option></select></label></div>
+    <div class="limsep"><div class="limsub"><b>Worker escalation (opt-in)</b><span>off by default · measure per provider/model pair</span></div>
+      <div class="bars">
+        <label class="pb"><div class="l">Preset</div><select id="esc-preset"${ro}>
+          <option value="off">Off (default)</option>
+          <option value="light">Light — ask after 2 rejections</option>
+          <option value="auto">Auto — escalate after 2 rejections</option>
+          <option value="custom">Custom parameters</option>
+        </select></label>
+        <label class="pb esc-f"><div class="l">Action</div><select data-k="escalate_mode"${ro}>
+          <option value="off">off</option><option value="ask">ask (pause &amp; confirm)</option><option value="auto">auto (promote next round)</option>
+        </select></label>
+        <label class="pb esc-f"><div class="l">After rejections</div><input data-k="escalate_after" type="number" min="0" step="1" value="${escAfter}"${ro}></label>
+        <label class="pb esc-f"><div class="l">Escalate to model</div><input data-k="escalate_model" type="text" value="${esc(L.escalate_model || '')}" placeholder="e.g. sonnet"${ro}></label>
+        <label class="pb esc-f"><div class="l">Escalated effort</div><input data-k="escalate_effort" type="text" value="${esc(L.escalate_effort || '')}" placeholder="default"${ro}></label>
+        <label class="pb esc-f"><div class="l">Max escalated tries/item</div><input data-k="escalate_max_tries" type="number" min="1" step="1" value="${escMax}"${ro}></label>
+        <label class="pb esc-f"><div class="l">Next item</div><select data-k="escalate_reset" data-bool="1"${ro}>
+          <option value="true">reset to base model</option><option value="false">keep escalated model</option>
+        </select></label>
+      </div>
+    </div>
     ${window.SNAPSHOT ? '' : '<button id="limsave">Save limits</button> <span class="note" id="limmsg"></span>'}`;
-  el.querySelector('select').value = L.on_limit;
+  el.querySelector('[data-k="on_limit"]').value = L.on_limit;
+  el.querySelector('[data-k="escalate_mode"]').value = escMode;
+  el.querySelector('[data-k="escalate_reset"]').value = escReset ? 'true' : 'false';
+  const presetEl = $('#esc-preset');
+  presetEl.value = preset;
+  const syncEscVis = () => {
+    const off = presetEl.value === 'off' && el.querySelector('[data-k="escalate_mode"]').value === 'off';
+    el.querySelectorAll('.esc-f').forEach(n => n.style.display = off ? 'none' : '');
+  };
+  const syncPresetFromFields = () => {
+    presetEl.value = escalationPresetOf({
+      escalate_mode: el.querySelector('[data-k="escalate_mode"]').value,
+      escalate_after: +el.querySelector('[data-k="escalate_after"]').value,
+      escalate_max_tries: +el.querySelector('[data-k="escalate_max_tries"]').value,
+      escalate_reset: el.querySelector('[data-k="escalate_reset"]').value === 'true',
+      escalate_effort: el.querySelector('[data-k="escalate_effort"]').value
+    });
+    syncEscVis();
+  };
+  presetEl.onchange = () => {
+    const v = presetEl.value;
+    if (v === 'off') {
+      el.querySelector('[data-k="escalate_mode"]').value = 'off';
+      el.querySelector('[data-k="escalate_after"]').value = 0;
+    } else if (v === 'light' || v === 'auto') {
+      el.querySelector('[data-k="escalate_mode"]').value = v === 'light' ? 'ask' : 'auto';
+      el.querySelector('[data-k="escalate_after"]').value = 2;
+      el.querySelector('[data-k="escalate_max_tries"]').value = 1;
+      el.querySelector('[data-k="escalate_reset"]').value = 'true';
+      el.querySelector('[data-k="escalate_effort"]').value = '';
+    } else if (el.querySelector('[data-k="escalate_mode"]').value === 'off') {
+      el.querySelector('[data-k="escalate_mode"]').value = 'ask';
+      el.querySelector('[data-k="escalate_after"]').value = 2;
+    }
+    syncEscVis();
+  };
+  el.querySelectorAll('.esc-f [data-k]').forEach(n => n.addEventListener('change', syncPresetFromFields));
+  syncEscVis();
   const btn = $('#limsave');
   if (btn) btn.onclick = async () => {
     const body = {};
-    el.querySelectorAll('[data-k]').forEach(i => body[i.dataset.k] = i.type === 'number' ? +i.value : i.value.trim());
+    el.querySelectorAll('[data-k]').forEach(i => {
+      body[i.dataset.k] = i.dataset.bool ? i.value === 'true' : (i.type === 'number' ? +i.value : i.value.trim());
+    });
     let r; try { r = await fetch('/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); } catch (e) { r = {ok: false}; }
     $('#limmsg').textContent = r.ok ? 'saved: the next round uses it' : 'not saved: ' + ((r.json && (await r.json()).error) || 'offline');
     if (r.ok) { document.activeElement.blur(); loadFlow(); }
@@ -891,6 +994,12 @@ function retryLabel(i) {
   return +i.retries ? `↺ ${i.retries} additional attempt${+i.retries === 1 ? '' : 's'}` : '';
 }
 
+function escalationLabel(i) {
+  if (i.escalated) return `↑ escalated${i.escalations.length > 1 ? ' ' + i.escalations.length + 'x' : ''}`;
+  if (i.escalation_pending) return `↑ escalate? (${i.review_rejections} review rejections)`;
+  return '';
+}
+
 function flowView() {
   const its = F.items, R = F.round, cols = layers(its, FB);
   const wait = i => i.kind === 'waiting' ? 'waits on ' + i.waits.map(x => '#' + x).join(' ') : i.kind === 'gate' ? 'waits for the user'
@@ -898,7 +1007,8 @@ function flowView() {
   const node = i => `<div class="node ${i.kind === 'now' ? 'pulse' : ''}" data-id="${esc(i.id)}" data-retry="${+i.retries}" style="--k:${kc(i.kind)}" title="${esc(i.state)}">
     <div class="nh"><span class="id">#${esc(i.id)}</span><span class="badge">${LK[i.kind]}</span><span class="tr">${+i.tries ? i.tries + (+i.tries > 1 ? ' tries' : ' try') : ''}</span></div>
     <div class="nn">${esc(i.title)}</div>${wait(i) ? `<div class="w">${esc(short(wait(i), 60))}</div>` : ''}
-    ${retryLabel(i) ? `<div class="w" style="color:${i.verify_failures ? C.blocked : 'var(--dim)'}">${esc(retryLabel(i))}</div>` : ''}</div>`;
+    ${retryLabel(i) ? `<div class="w" style="color:${i.verify_failures ? C.blocked : 'var(--dim)'}">${esc(retryLabel(i))}</div>` : ''}
+    ${escalationLabel(i) ? `<div class="w" style="color:${i.escalation_pending ? C.unblocked : C.tag}">${esc(escalationLabel(i))}</div>` : ''}</div>`;
   const on = v => v === null ? 'unknown' : v ? 'running' : 'stopped';
   const E = F.execution;
   const sys = E ? `<div class="col"><div class="col-h">native execution</div>
@@ -936,6 +1046,7 @@ function fpane(id) {
   const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc(FB[x]?.title || '')}</button>`;
   P.style.setProperty('--k', kc(i.kind));
   P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.title)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)}${i.note ? ` (${esc(i.note)})` : ''} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+    ${i.escalated || i.escalation_pending || i.review_rejections ? `<div class="callout"><b>${i.escalation_pending ? 'Escalation awaiting approval' : i.escalated ? 'Worker escalated' : 'Reviewer rejections'}</b>${esc(i.escalations?.length ? i.escalations.join(' · ') : `${i.review_rejections} reviewer rejection${i.review_rejections === 1 ? '' : 's'}`)}</div>` : ''}
     <details class="full"><summary>full item text</summary><div class="bd">${rich(i.what)}</div></details>
     ${i.deps.length ? `<h3>Depends on</h3><div class="deps">${i.deps.map(btn).join('')}</div>` : ''}
     ${i.waits.length && i.kind !== 'done' ? `<h3>Waits on</h3><div class="deps">${i.waits.map(btn).join('')}</div>` : ''}

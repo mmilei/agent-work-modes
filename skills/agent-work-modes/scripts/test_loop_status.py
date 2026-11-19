@@ -294,6 +294,17 @@ def test_state_note_in_parentheses_keeps_the_state():
         assert current == "2"
 
 
+def test_running_state_marks_several_items_now():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        (d / "LOOP-STATE.md").write_text("| # | Item | State |\n|---|---|---|\n| 1 | A | todo |\n| 2 | B | running (Opus) |\n| 3 | C | running |\n",
+                                          encoding="utf-8")
+        its, current = m.items(d)
+        assert [i["kind"] for i in its] == ["todo", "now", "now"]
+        assert current == "2"
+
+
 def test_native_execution():
     m = load_mod()
     with tempfile.TemporaryDirectory() as tmp:

@@ -138,16 +138,18 @@ def items(loop=None):
         tries = row.get("tries", "0")
         tries = tries if tries.isdigit() else "0"
         # `done (abc123)` is `done` plus a note (commit, date...): the note is card data, not a different state
-        m = re.fullmatch(r"(todo|done)\s*\((.*)\)", row["state"])
+        m = re.fullmatch(r"(todo|done|running)\s*\((.*)\)", row["state"])
         state, note = (m.group(1), m.group(2).strip()) if m else (row["state"], "")
         out.append({"id": row["id"], "name": row.get("name", ""),
                     "deps": re.findall(r"\b" + ID + r"\b", row.get("deps", "")),
                     "state": state, "note": note, "tries": tries})
     done = {it["id"] for it in out if it["state"] == "done"}
-    current = next((it["id"] for it in out if it["state"] == "todo" and set(it["deps"]) <= done), None)
+    # `running` marks every item being worked on right now (parallel workers); without any, the first unblocked todo is current
+    current = next((it["id"] for it in out if it["state"] == "running"),
+                   next((it["id"] for it in out if it["state"] == "todo" and set(it["deps"]) <= done), None))
     for it in out:
         it["kind"] = ("done" if it["state"] == "done" else "blocked" if it["state"].startswith("BLOCKED")
-                      else "now" if it["id"] == current else "todo")
+                      else "now" if it["state"] == "running" or it["id"] == current else "todo")
     return out, current
 
 

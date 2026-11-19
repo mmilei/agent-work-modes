@@ -1,0 +1,28 @@
+2026-11-18T01:15:40.3399457-03:00
+test_fresh_loop.py
+ok
+test_loop_status.py
+snapshot written to C:\Users\Maxi\AppData\Local\Temp\tmpb69a9dq1\snapshot
+snapshot written to C:\Users\Maxi\AppData\Local\Temp\tmpb69a9dq1\snapshot
+ok
+test_redact.py
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\flow.json: path: 'C:\\\\Users\\\\someone\\\\git\\\\secret-app'
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\flow.json: path: '/home/someone/x'
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\flow.json: path: '/Users/bob/y'
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\flow.json: path: 'D:/work/repo/file.py'
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\flow.json: term: 'SecretApp'
+redact: 5 finding(s)
+redact: clean
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\chat.json: spanish: 'tarea'
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\chat.json: spanish: '�'
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\chat.json: spanish: 'para'
+C:\Users\Maxi\AppData\Local\Temp\tmpampm8_ge\chat.json: spanish: '�'
+redact: 4 finding(s)
+ok
+test_session_cost.py
+ok
+test_stop_gate.py
+ok
+test_usage.js
+ok: tokens, optional prices, mixed pricing, steering share, zero and empty usage
+ALL CHECKS PASSED

@@ -137,9 +137,12 @@ def items(loop=None):
             continue
         tries = row.get("tries", "0")
         tries = tries if tries.isdigit() else "0"
+        # `done (abc123)` is `done` plus a note (commit, date...): the note is card data, not a different state
+        m = re.fullmatch(r"(todo|done)\s*\((.*)\)", row["state"])
+        state, note = (m.group(1), m.group(2).strip()) if m else (row["state"], "")
         out.append({"id": row["id"], "name": row.get("name", ""),
                     "deps": re.findall(r"\b" + ID + r"\b", row.get("deps", "")),
-                    "state": row["state"], "tries": tries})
+                    "state": state, "note": note, "tries": tries})
     done = {it["id"] for it in out if it["state"] == "done"}
     current = next((it["id"] for it in out if it["state"] == "todo" and set(it["deps"]) <= done), None)
     for it in out:
@@ -318,6 +321,8 @@ def flow_data():
     its, current = items()
     by = {it["id"]: it for it in its}
     ev = loop_events(LOOP)
+    cfg = loop_config()
+    esc = escalation_policy(cfg)
     for it in its:
         it["waits"] = [d for d in it["deps"] if by.get(d, {}).get("kind") != "done"]
         if it["kind"] == "todo" and it["waits"]:
@@ -330,11 +335,32 @@ def flow_data():
         it["retries"] = max(int(it["tries"]) - 1, 0)  # the first attempt is never a retry
         it["ev"] = [{"t": e["t"].strftime(FMT), "kind": e["kind"], "title": e["name"], "body": e["body"]}
                     for e in ev if e["id"] == it["id"]]
+        it["verify_failures"] = sum(bool(re.search(r"^VERIFY:\s*FAIL(?:ED)?\b", e["body"], re.I | re.M))
+                                    for e in it["ev"])
+        it["review_rejections"] = sum(bool(re.search(r"^REVIEW:\s*REJECT(?:ED)?\b", e["body"], re.I | re.M))
+                                      for e in it["ev"])
+        it["escalations"] = [m.group(1).strip() for e in it["ev"]
+                             for m in re.finditer(r"^ESCALATED:\s*(.+)$", e["body"], re.I | re.M)]
+        it["escalated"] = bool(it["escalations"])
+        it["escalation_pending"] = (
+            it["kind"] not in ("done", "blocked", "gate")
+            and esc["mode"] == "ask" and esc["after"] >= 1 and bool(esc["model"])
+            and it["review_rejections"] >= esc["after"]
+            and len(it["escalations"]) < esc["max_tries"]
+        )
+    esc_items = [it for it in its if it["escalated"]]
+    esc_summary = {
+        **esc,
+        "items": len(esc_items),
+        "pending": sum(1 for it in its if it["escalation_pending"]),
+        "done": sum(1 for it in esc_items if it["kind"] == "done"),
+        "blocked": sum(1 for it in esc_items if it["kind"] == "blocked"),
+    }
     log, usage_txt = read(Path(args.log)) if args.log else "", read(LOOP / "LOOP-USAGE.md")
     rounds = re.findall(r"fresh-loop: round (\d+)/(\d+)", log)
     usage = re.findall(r"^- \[(\d\d:\d\d)\] (.*)$", usage_txt, re.M)
-    cap = (loop_config() or {}).get("rounds") or (rounds[-1][1] if rounds else
-                                                  (re.findall(r"\bcap (\d+)", read(LOOP / "LOOP-STATE.md") + usage_txt) or [0])[0])
+    cap = (cfg or {}).get("rounds") or (rounds[-1][1] if rounds else
+                                        (re.findall(r"\bcap (\d+)", read(LOOP / "LOOP-STATE.md") + usage_txt) or [0])[0])
     day = (re.findall(r"\d{4}-\d\d-\d\d", usage_txt) or [datetime.now().strftime("%Y-%m-%d")])[0]
     stream = [{"t": f"{day}T{hm}", "kind": "usage", "text": line} for hm, line in usage]
     stream += [{"t": e["t"].strftime(FMT), "kind": "round", "text": f"item {e['id']}: {e['name']}"} for e in ev]
@@ -354,7 +380,7 @@ def flow_data():
            "last": datetime.fromtimestamp(tr[0].stat().st_mtime).strftime("%H:%M:%S") if tr else ""}
     return {"title": TITLE, "loop": LOOP.name, "now": datetime.now().strftime("%H:%M:%S"), "items": its,
             "current": current, "round": rnd, "execution": execution, "spend": result_spend(LOOP),
-            "limits": None if execution else loop_config(),
+            "limits": None if execution else cfg, "escalation": esc_summary,
             "tokens": sum(int(x.replace(",", "")) for _, line in usage for x in re.findall(r"(\d[\d,]*) ?tok", line)),
             "usd": sum(float(x.replace(",", "")) for _, line in usage for x in re.findall(r"\$(\d[\d,]*(?:\.\d+)?)", line)),
             "usage": [{"t": hm, "text": line} for hm, line in usage],
@@ -364,7 +390,30 @@ def flow_data():
 
 CONFIG = "loop-config.json"
 CONFIG_FIELDS = {"rounds": (int, 1), "max_tokens": (int, 0), "max_usd": ((int, float), 0),
-                 "max_orchestrator_tokens": (int, 0), "max_minutes": ((int, float), 0)}
+                 "max_orchestrator_tokens": (int, 0), "max_minutes": ((int, float), 0),
+                 "escalate_after": (int, 0), "escalate_max_tries": (int, 1)}
+ESCALATE_DEFAULTS = {"escalate_mode": "off", "escalate_after": 0, "escalate_model": "",
+                     "escalate_effort": "", "escalate_max_tries": 1, "escalate_reset": True}
+
+
+def escalation_policy(cfg):
+    raw = {**ESCALATE_DEFAULTS, **(cfg or {})}
+    mode = raw["escalate_mode"] if raw["escalate_mode"] in ("off", "ask", "auto") else "off"
+    after = raw["escalate_after"] if isinstance(raw["escalate_after"], int) and not isinstance(raw["escalate_after"], bool) and raw["escalate_after"] >= 0 else 0
+    model = raw["escalate_model"] if isinstance(raw["escalate_model"], str) else ""
+    effort = raw["escalate_effort"] if isinstance(raw["escalate_effort"], str) else ""
+    max_tries = raw["escalate_max_tries"] if isinstance(raw["escalate_max_tries"], int) and not isinstance(raw["escalate_max_tries"], bool) and raw["escalate_max_tries"] >= 1 else 1
+    reset = raw["escalate_reset"] if isinstance(raw["escalate_reset"], bool) else True
+    if mode == "off":
+        preset = "off"
+    elif mode == "ask" and after == 2 and max_tries == 1 and reset and not effort:
+        preset = "light"
+    elif mode == "auto" and after == 2 and max_tries == 1 and reset and not effort:
+        preset = "auto"
+    else:
+        preset = "custom"
+    return {"mode": mode, "after": after, "model": model, "effort": effort,
+            "max_tries": max_tries, "reset": reset, "preset": preset}
 
 
 def loop_config():
@@ -395,7 +444,13 @@ def set_config(raw):
         elif k == "on_limit":
             if v not in ("stop", "warn"):
                 raise ValueError("on_limit: expected stop or warn")
-        elif k in ("model", "effort"):
+        elif k == "escalate_mode":
+            if v not in ("off", "ask", "auto"):
+                raise ValueError("escalate_mode: expected off, ask or auto")
+        elif k == "escalate_reset":
+            if not isinstance(v, bool):
+                raise ValueError("escalate_reset: expected a boolean")
+        elif k in ("model", "effort", "escalate_model", "escalate_effort"):
             if not (isinstance(v, str) and re.fullmatch(r"[\w.\[\]-]{0,40}", v)):
                 raise ValueError(f"{k}: expected a short model or effort name")
         else:
@@ -403,6 +458,9 @@ def set_config(raw):
         clean[k] = v
     with CHAT_LOCK:
         cfg = {**(loop_config() or {}), **clean}
+        esc = escalation_policy(cfg)
+        if esc["mode"] in ("ask", "auto") and (esc["after"] < 1 or not esc["model"]):
+            raise ValueError("escalate_mode ask/auto requires escalate_after >= 1 and escalate_model")
         tmp = LOOP / (CONFIG + ".tmp")
         tmp.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
         os.replace(tmp, LOOP / CONFIG)  # the driver never sees a half-written file
@@ -618,8 +676,11 @@ def claude_file(f):
 
 def codex_file(f):
     d = {"prompt": "", "prompts": 0, "start": 0, "end": 0, "cwd": "", "models": set(), "tok": [0, 0, 0, 0],
-         "id": "", "parent": "", "source": "", "usage_available": False, "calls": 0, "token_fields": None}
+         "id": "", "parent": "", "source": "", "usage_available": False, "calls": 0, "token_fields": None,
+         "usage_independent": True, "usage_events": {}}
     previous_usage = None
+    previous_tokens = [0] * 4
+    decreased = False
     for line in f.open(encoding="utf-8", errors="replace"):
         try:
             e = json.loads(line)
@@ -651,12 +712,26 @@ def codex_file(f):
             d["usage_available"] = u.get("input_tokens") is not None and u.get("output_tokens") is not None
             if u != previous_usage:
                 d["calls"] += 1
-            previous_usage = u
             d["token_fields"] = [u.get(k) is not None for k in
                                  ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_input_tokens")]
             cached_in = u.get("cached_input_tokens") or 0
             d["tok"] = [(u.get("input_tokens") or 0) - cached_in, u.get("output_tokens") or 0, cached_in,
                         u.get("cache_write_input_tokens") or 0]
+            if u != previous_usage:
+                last = (p.get("info") or {}).get("last_token_usage") or {}
+                read = last.get("cached_input_tokens") or 0
+                increment = [(last.get("input_tokens") or 0) - read, last.get("output_tokens") or 0,
+                             read, last.get("cache_write_input_tokens") or 0]
+                # Only add files whose totals are entirely explained by their local calls.
+                d["usage_independent"] &= (bool(t) and last.get("input_tokens") is not None and
+                    last.get("output_tokens") is not None and
+                    d["tok"] == [a + b for a, b in zip(previous_tokens, increment)])
+                decreased |= any(a < b for a, b in zip(d["tok"], previous_tokens))
+                key = hashlib.sha256(json.dumps([e.get("timestamp"), u, last], sort_keys=True).encode()).hexdigest()
+                d["usage_events"][key] = increment
+                previous_tokens = d["tok"]
+            previous_usage = u
+    d["usage_available"] &= not decreased
     return d
 
 
@@ -767,18 +842,35 @@ def build(hours=24, project=""):
             edge(src, target, "messages", k)
             nodes[src]["sends"] += k
 
-    # Codex
+    # Group rollouts by logical chat ID before choosing how to combine their counters.
+    codex_sessions = {}
     for f in CODEX.rglob("*.jsonl") if CODEX.exists() else []:
-        if f.stat().st_mtime < cut:
-            continue
         d = cached(f, codex_file)
         if not d["id"] or not d["start"]:
             continue
+        codex_sessions.setdefault(d["id"], []).append((f, d))
+    for segments in codex_sessions.values():
+        if max(f.stat().st_mtime for f, _ in segments) < cut:
+            continue
+        segments.sort(key=lambda pair: (pair[1]["end"], str(pair[0])))
+        f, latest = segments[-1]
+        d = dict(latest)
+        if len(segments) > 1:
+            events = {k: v for _, part in segments for k, v in part["usage_events"].items()}
+            d["usage_available"] = all(part["usage_available"] and part["usage_independent"] and
+                                       part["parent"] == latest["parent"] for _, part in segments)
+            d["tok"] = [sum(v[i] for v in events.values()) for i in range(4)] if d["usage_available"] else [0] * 4
+            d["calls"] = len(events) if d["usage_available"] else None
+            d["token_fields"] = [all((part["token_fields"] or [False] * 4)[i] for _, part in segments) for i in range(4)]
+            d["start"] = min(part["start"] for _, part in segments)
+            d["models"] = set().union(*(part["models"] for _, part in segments))
+            d["prompts"] = sum(part["prompts"] for _, part in segments)
         cid, pid = "x:" + d["id"], "x:" + d["parent"] if d["parent"] else ""
         nodes[cid] = node(cid, "codex", "subagents" if pid else "interactive", d,
-                          mode="codex subagent" if pid else "codex", active=now - f.stat().st_mtime < ACTIVE_S,
+                          mode="codex subagent" if pid else "codex", active=any(now - p.stat().st_mtime < ACTIVE_S for p, _ in segments),
                           label=d["source"] if pid and d["source"] else d["prompt"][:60], parent=pid,
-                          project=Path(d["cwd"]).name, source=str(f))
+                          project=Path(d["cwd"]).name, source=str(f),
+                          source_tokens={str(p): part["tok"] for p, part in segments})
         if pid:
             edge(pid, cid, "launched")
         else:
@@ -871,7 +963,7 @@ def usage_check(stage, root=None):
         if children <= ids:
             break
         ids |= children
-    sessions = {n["id"]: {k: n.get(k) for k in ("tok", "calls", "start", "end", "usage_available", "source", "token_fields")}
+    sessions = {n["id"]: {k: n.get(k) for k in ("tok", "calls", "start", "end", "usage_available", "source", "token_fields", "source_tokens")}
                 for n in graph["nodes"] if n["id"] in ids}
     budget_start = (native_execution() or {}).get("budget_started_at")
     started = ts(budget_start) if budget_start else 0
@@ -912,6 +1004,22 @@ def usage_check(stage, root=None):
     missing = sorted((ids - sessions.keys()) | {sid for sid, n in sessions.items() if not n["usage_available"]})
     if missing:
         reasons.append("telemetry missing for " + ", ".join(missing))
+    source_missing, source_decreased = False, False
+    for checkpoint in history:
+        for sid, old in checkpoint["sessions"].items():
+            sources = old.get("source_tokens") or ({old["source"]: old["tok"]} if old.get("source") else {})
+            current_sources = sessions.get(sid, {}).get("source_tokens")
+            if current_sources is None:
+                continue
+            source_missing |= bool(sources.keys() - current_sources.keys())
+            # Older checkpoints with only one selected file cannot establish a multi-rollout baseline.
+            source_missing |= not old.get("source_tokens") and len(current_sources) > 1
+            source_decreased |= any(any(a < b for a, b in zip(current_sources[source], tok))
+                                    for source, tok in sources.items() if source in current_sources)
+    if source_missing:
+        reasons.append("telemetry missing for rollout sources or per-rollout baseline")
+    if source_decreased:
+        reasons.append("usage counters decreased in a rollout source; inspect before continuing")
     if any(any(a < b for a, b in zip(n["tok"], previous["sessions"].get(sid, {}).get("tok", [0] * 4)))
            for sid, n in sessions.items()):
         reasons.append("usage counters decreased; inspect the source before continuing")

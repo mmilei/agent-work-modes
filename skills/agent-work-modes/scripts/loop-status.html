@@ -160,6 +160,10 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .pb .l{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
 .pb .l b{font:600 12px var(--mono);color:var(--chalk);text-transform:none;letter-spacing:0}
 .pb input,.pb select{width:100%;margin-top:6px;background:var(--bg2);color:var(--chalk);border:1px solid var(--line2);border-radius:7px;padding:5px 8px;font:inherit}
+.limsep{border-top:1px solid var(--line);margin:14px 0 10px;padding-top:12px}
+.limsub{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.limsub b{font:600 12px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--chalk)}
+.limsub span{color:var(--dim);font-size:11.5px}
 #limsave{margin-top:12px;background:var(--accent);color:#0a0f0c;border:0;border-radius:8px;padding:6px 14px;font:600 13px Inter,sans-serif;cursor:pointer}
 .pb .track{height:10px;background:var(--line);border-radius:5px;overflow:hidden;display:flex;margin-top:7px}
 .pb .track i{display:block;height:100%}
@@ -236,7 +240,7 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .urow{display:grid;grid-template-columns:minmax(90px,210px) minmax(0,1fr) 128px;gap:10px;align-items:center;margin:7px 0;font-size:13px}
 .urow.click{cursor:pointer;border-radius:6px;padding:2px 4px;margin:5px -4px}.urow.click:hover{background:var(--card2)}
 .urow .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.urow .x{text-align:right;font:500 11.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--dim);white-space:nowrap}
+.urow .x{text-align:right;font:500 11.5px var(--mono);font-variant-numeric:tabular-nums;color:var(--dim);overflow-wrap:anywhere}
 .utrack{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--line)}.utrack i{display:block;height:100%}
 .cols{display:flex;align-items:flex-end;gap:4px;height:150px;border-bottom:1px solid var(--line);padding-top:8px}
 .cols > div{flex:1;display:flex;flex-direction:column-reverse;min-width:0;height:100%}.cols i{display:block}
@@ -277,7 +281,7 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
   <nav class="tabs" id="tabs" role="tablist">
     <button class="tab" type="button" data-tab="loop" role="tab">Loop &amp; History <span class="tbadge" id="badge-loop">0</span></button>
     <button class="tab" type="button" data-tab="graph" role="tab">Sessions &amp; Graph <span class="tbadge" id="badge-graph">0</span></button>
-    <button class="tab" type="button" data-tab="usage" role="tab">Usage &amp; Spend <span class="tbadge" id="badge-usage">unknown</span></button>
+    <button class="tab" type="button" data-tab="usage" role="tab">Usage &amp; Spend <span class="tbadge" id="badge-usage">—</span></button>
   </nav>
 
   <!-- TAB 1: LOOP & HISTORY -->
@@ -394,7 +398,7 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
   <div class="tabview" id="tab-usage">
     <div class="board" id="ukpis" style="margin-top:0"></div>
     <section>
-      <h2>Spend by work mode <small>tokens processed per output token on the right</small></h2>
+      <h2>Tokens by work mode <small>tokens processed per output token on the right</small></h2>
       <div class="panel">
         <div class="legend" id="ulegend" style="margin-top:0;margin-bottom:10px"></div>
         <div id="umodes"></div>
@@ -403,18 +407,18 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
     </section>
     <section class="two">
       <div class="panel">
-        <h2 style="margin-bottom:10px">Spend per day <small>stacked by work mode</small></h2>
+        <h2 style="margin-bottom:10px">Tokens per day <small>stacked by work mode</small></h2>
         <div class="cols" id="udays"></div>
         <div class="ticks" id="udayt"></div>
       </div>
       <div class="panel">
-        <h2 style="margin-bottom:10px">Spend by hour <small>local time, stacked by work mode</small></h2>
+        <h2 style="margin-bottom:10px">Tokens by hour <small>local time, stacked by work mode</small></h2>
         <div class="cols" id="uhours"></div>
         <div class="ticks" id="uhourt"></div>
       </div>
     </section>
     <section>
-      <h2>Spend by project <small>click a project to filter the whole board</small></h2>
+      <h2>Tokens by project <small>click a project to filter the whole board</small></h2>
       <div class="panel" id="uprojects"></div>
     </section>
     <section>
@@ -517,6 +521,11 @@ function knownCost(nodes) {
   return usd(priced.reduce((s, n) => s + n.cost, 0)) + (priced.length < nodes.length ? ' + unknown' : '');
 }
 
+function usageAmount(nodes) {
+  const tokens = fmtN(nodes.reduce((s, n) => s + (n.tokens || 0), 0)) + ' tok';
+  return tokens + (nodes.length && nodes.every(n => n.cost != null) ? ' (' + knownCost(nodes) + ')' : '');
+}
+
 function updateBadges() {
   const fItems = F?.items || [];
   const dLoops = D?.loops || [];
@@ -526,7 +535,7 @@ function updateBadges() {
   const running = gNodes.filter(n => n.active).length;
   $('#badge-graph').textContent = running ? `${running} recent · ${gNodes.length}` : String(gNodes.length);
   const uNodes = G ? usageNodes() : [];
-  $('#badge-usage').textContent = knownCost(uNodes);
+  $('#badge-usage').textContent = usageAmount(uNodes);
 }
 
 function renderLoopVisibility() {
@@ -778,7 +787,7 @@ function pane(l, by, id) {
   const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc((by[x]?.name || '').slice(0, 28))}</button>`;
   $('#pane').style.setProperty('--k', kc(k));
   $('#pane').innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.name)}</div>
-    <div class="ps">${esc(i.state)} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+    <div class="ps">${esc(i.state)}${i.note ? ` (${esc(i.note)})` : ''} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
     ${i.deps.length ? `<h3>Depends on</h3><div class="deps">${i.deps.map(btn).join('')}</div>` : ''}
     ${users.length ? `<h3>Unblocks</h3><div class="deps">${users.map(u => btn(u.id)).join('')}</div>` : ''}
     <h3>Evidence</h3>${ev.length ? ev.map(e => `<div class="pev" style="--k:${C[e.kind]}"><time>${dm(e.t)} ${hm(e.t)}</time><span class="kt">${KIND[e.kind]}</span>
@@ -830,6 +839,25 @@ async function loadFlow() {
   updateBadges();
 }
 
+function escalationBar(pb) {
+  const E = F.escalation;
+  if (!E || (E.mode === 'off' && !E.items && !E.pending)) return '';
+  const parts = [];
+  if (E.mode !== 'off') parts.push(`${E.preset}${E.model ? ' → ' + E.model : ''}`);
+  parts.push(`${E.items} escalated`);
+  if (E.items) parts.push(`${E.done} done · ${E.blocked} blocked`);
+  if (E.pending) parts.push(`${E.pending} awaiting ok`);
+  const tot = Math.max(E.items + E.pending, 1);
+  const inProg = Math.max(E.items - E.done - E.blocked, 0);
+  const segs = E.items || E.pending ? [
+    [E.done, C.done, `done after escalation: ${E.done}`],
+    [inProg, C.tag, `in progress after escalation: ${inProg}`],
+    [E.pending, C.unblocked, `awaiting escalation approval: ${E.pending}`],
+    [E.blocked, C.blocked, `blocked after escalation: ${E.blocked}`]
+  ].filter(s => s[0]).map(([v, c, tip]) => `<i title="${esc(tip)}" style="width:${v / tot * 100}%;background:${c}"></i>`).join('') : '';
+  return pb('Worker escalation', esc(parts.join(' · ')), `<div class="track">${segs}</div>`);
+}
+
 function bars() {
   const its = F.items, n = its.length || 1, cnt = k => its.filter(i => i.kind === k).length, R = F.round, sp = F.spend;
   const pb = (l, v, body) => `<div class="pb"><div class="l">${l}<b>${v}</b></div>${body}</div>`;
@@ -844,29 +872,109 @@ function bars() {
     pb('Tries per item', `${its.reduce((a, i) => a + +i.tries, 0)} total · ${its.filter(i => +i.retries).length} retried`, `<div class="tries">${tries}</div>`) +
     pb('Tokens (usage lines)', F.tokens ? num(F.tokens) : 'none logged', `<div class="track">${tok.map(([u, t], i) => `<i title="${esc(u.t)} · ${num(t)} tokens · ${esc(u.text)}" style="width:${t / F.tokens * 100}%;background:${shade(i)}"></i>`).join('')}</div>`) +
     pb('Cost (USD est.)', sp ? '$' + num(sp.usd, 2) : F.usd ? '$' + num(F.usd, 2) + ' (usage lines)' : 'unknown', `<div class="track">${sp ? sp.items.map((it, i) => `<i title="${esc(it.item)} · $${num(it.usd, 2)}" style="width:${it.usd / (sp.usd || 1) * 100}%;background:${shade(i)}"></i>`).join('') : ''}</div>`) +
+    escalationBar(pb) +
     steer(sp ? sp.usd : F.usd || 0, pb);
 }
 
+function escalationPresetOf(cfg) {
+  const m = cfg.escalate_mode || 'off', after = +cfg.escalate_after || 0, max = +cfg.escalate_max_tries || 1;
+  const reset = cfg.escalate_reset !== false, eff = (cfg.escalate_effort || '').trim();
+  if (m === 'off') return 'off';
+  if (m === 'ask' && after === 2 && max === 1 && reset && !eff) return 'light';
+  if (m === 'auto' && after === 2 && max === 1 && reset && !eff) return 'auto';
+  return 'custom';
+}
+
 function limits() {
-  const el = $('#limits'), L = F.limits, sp = F.spend || {tokens: 0, usd: 0};
+  const el = $('#limits'), L = F.limits, sp = F.spend || {tokens: 0, usd: 0}, E = F.escalation;
   if (el.contains(document.activeElement) && document.activeElement.tagName !== 'BODY') return;
   el.previousElementSibling.querySelector('small').textContent = F.execution ? 'managed by the native orchestrator' : 'fresh-loop.py re-reads them before every round';
-  if (F.execution) { el.innerHTML = '<span class="note">Native orchestration: limits are managed by the orchestrator. Token quota and cost are unknown unless measured.</span>'; return; }
+  if (F.execution) {
+    const escNote = E && E.mode !== 'off'
+      ? `<div class="limsep"><div class="limsub"><b>Worker escalation (opt-in · ${esc(E.preset)})</b><span>read-only · measure per provider</span></div>
+         <div class="note" style="margin-top:0;color:var(--chalk)">${esc(E.mode)} after ${E.after} reviewer rejections → <code>${esc(E.model || 'unset')}</code>${E.effort ? ` (${esc(E.effort)})` : ''} · max ${E.max_tries}/item · ${E.reset ? 'reset per item' : 'sticky'}</div></div>`
+      : '';
+    el.innerHTML = '<span class="note">Native orchestration: limits are managed by the orchestrator. Token quota and cost are unknown unless measured.</span>' + escNote;
+    return;
+  }
   if (!L) { el.innerHTML = '<span class="note">no loop-config.json yet: fresh-loop.py writes it when it starts</span>'; return; }
   const ro = window.SNAPSHOT ? ' disabled' : '';
   const over = {rounds: F.round.n >= L.rounds, max_tokens: L.max_tokens && sp.tokens >= L.max_tokens, max_usd: L.max_usd && sp.usd >= L.max_usd};
   const f = (k, label, used, step) => `<label class="pb"><div class="l">${label}<b style="color:${over[k] ? C.blocked : 'inherit'}">${used}${over[k] ? ' · over' : ''}</b></div>
     <input data-k="${k}" type="number" min="${k === 'rounds' ? 1 : 0}" step="${step}" value="${L[k]}"${ro}></label>`;
-  const t = (k, label) => `<label class="pb"><div class="l">${label}</div><input data-k="${k}" type="text" value="${esc(L[k] || '')}" placeholder="default"${ro}></label>`;
+  const t = (k, label, ph = 'default') => `<label class="pb"><div class="l">${label}</div><input data-k="${k}" type="text" value="${esc(L[k] || '')}" placeholder="${ph}"${ro}></label>`;
+  const escMode = L.escalate_mode || 'off', escAfter = L.escalate_after ?? 0, escMax = L.escalate_max_tries ?? 1;
+  const escReset = L.escalate_reset !== false;
+  const preset = escalationPresetOf({escalate_mode: escMode, escalate_after: escAfter, escalate_max_tries: escMax,
+    escalate_reset: escReset, escalate_effort: L.escalate_effort || ''});
   el.innerHTML = `<div class="bars">${f('rounds', 'Rounds', F.round.n + ' used', 1)}${f('max_tokens', 'Max tokens (0 = none)', num(sp.tokens) + ' used', 1000)}${f('max_usd', 'Max USD (0 = none)', '$' + num(sp.usd, 2) + ' used', 0.5)}
     ${t('model', 'Model')}${t('effort', 'Effort')}
     <label class="pb"><div class="l">At a cap</div><select data-k="on_limit"${ro}><option value="stop">stop the loop</option><option value="warn">only warn (red)</option></select></label></div>
+    <div class="limsep"><div class="limsub"><b>Worker escalation (opt-in)</b><span>off by default · measure per provider/model pair</span></div>
+      <div class="bars">
+        <label class="pb"><div class="l">Preset</div><select id="esc-preset"${ro}>
+          <option value="off">Off (default)</option>
+          <option value="light">Light — ask after 2 rejections</option>
+          <option value="auto">Auto — escalate after 2 rejections</option>
+          <option value="custom">Custom parameters</option>
+        </select></label>
+        <label class="pb esc-f"><div class="l">Action</div><select data-k="escalate_mode"${ro}>
+          <option value="off">off</option><option value="ask">ask (pause &amp; confirm)</option><option value="auto">auto (promote next round)</option>
+        </select></label>
+        <label class="pb esc-f"><div class="l">After rejections</div><input data-k="escalate_after" type="number" min="0" step="1" value="${escAfter}"${ro}></label>
+        <label class="pb esc-f"><div class="l">Escalate to model</div><input data-k="escalate_model" type="text" value="${esc(L.escalate_model || '')}" placeholder="e.g. sonnet"${ro}></label>
+        <label class="pb esc-f"><div class="l">Escalated effort</div><input data-k="escalate_effort" type="text" value="${esc(L.escalate_effort || '')}" placeholder="default"${ro}></label>
+        <label class="pb esc-f"><div class="l">Max escalated tries/item</div><input data-k="escalate_max_tries" type="number" min="1" step="1" value="${escMax}"${ro}></label>
+        <label class="pb esc-f"><div class="l">Next item</div><select data-k="escalate_reset" data-bool="1"${ro}>
+          <option value="true">reset to base model</option><option value="false">keep escalated model</option>
+        </select></label>
+      </div>
+    </div>
     ${window.SNAPSHOT ? '' : '<button id="limsave">Save limits</button> <span class="note" id="limmsg"></span>'}`;
-  el.querySelector('select').value = L.on_limit;
+  el.querySelector('[data-k="on_limit"]').value = L.on_limit;
+  el.querySelector('[data-k="escalate_mode"]').value = escMode;
+  el.querySelector('[data-k="escalate_reset"]').value = escReset ? 'true' : 'false';
+  const presetEl = $('#esc-preset');
+  presetEl.value = preset;
+  const syncEscVis = () => {
+    const off = presetEl.value === 'off' && el.querySelector('[data-k="escalate_mode"]').value === 'off';
+    el.querySelectorAll('.esc-f').forEach(n => n.style.display = off ? 'none' : '');
+  };
+  const syncPresetFromFields = () => {
+    presetEl.value = escalationPresetOf({
+      escalate_mode: el.querySelector('[data-k="escalate_mode"]').value,
+      escalate_after: +el.querySelector('[data-k="escalate_after"]').value,
+      escalate_max_tries: +el.querySelector('[data-k="escalate_max_tries"]').value,
+      escalate_reset: el.querySelector('[data-k="escalate_reset"]').value === 'true',
+      escalate_effort: el.querySelector('[data-k="escalate_effort"]').value
+    });
+    syncEscVis();
+  };
+  presetEl.onchange = () => {
+    const v = presetEl.value;
+    if (v === 'off') {
+      el.querySelector('[data-k="escalate_mode"]').value = 'off';
+      el.querySelector('[data-k="escalate_after"]').value = 0;
+    } else if (v === 'light' || v === 'auto') {
+      el.querySelector('[data-k="escalate_mode"]').value = v === 'light' ? 'ask' : 'auto';
+      el.querySelector('[data-k="escalate_after"]').value = 2;
+      el.querySelector('[data-k="escalate_max_tries"]').value = 1;
+      el.querySelector('[data-k="escalate_reset"]').value = 'true';
+      el.querySelector('[data-k="escalate_effort"]').value = '';
+    } else if (el.querySelector('[data-k="escalate_mode"]').value === 'off') {
+      el.querySelector('[data-k="escalate_mode"]').value = 'ask';
+      el.querySelector('[data-k="escalate_after"]').value = 2;
+    }
+    syncEscVis();
+  };
+  el.querySelectorAll('.esc-f [data-k]').forEach(n => n.addEventListener('change', syncPresetFromFields));
+  syncEscVis();
   const btn = $('#limsave');
   if (btn) btn.onclick = async () => {
     const body = {};
-    el.querySelectorAll('[data-k]').forEach(i => body[i.dataset.k] = i.type === 'number' ? +i.value : i.value.trim());
+    el.querySelectorAll('[data-k]').forEach(i => {
+      body[i.dataset.k] = i.dataset.bool ? i.value === 'true' : (i.type === 'number' ? +i.value : i.value.trim());
+    });
     let r; try { r = await fetch('/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); } catch (e) { r = {ok: false}; }
     $('#limmsg').textContent = r.ok ? 'saved: the next round uses it' : 'not saved: ' + ((r.json && (await r.json()).error) || 'offline');
     if (r.ok) { document.activeElement.blur(); loadFlow(); }
@@ -881,6 +989,17 @@ function steer(run, pb) {
     `<div class="track"><i style="width:${Math.min(share, 1) * 100}%;background:${over ? C.blocked : C.tag}"></i></div>`);
 }
 
+function retryLabel(i) {
+  if (i.verify_failures) return `↺ failed VERIFY ${i.verify_failures}x${+i.retries ? ', retried' : ''}`;
+  return +i.retries ? `↺ ${i.retries} additional attempt${+i.retries === 1 ? '' : 's'}` : '';
+}
+
+function escalationLabel(i) {
+  if (i.escalated) return `↑ escalated${i.escalations.length > 1 ? ' ' + i.escalations.length + 'x' : ''}`;
+  if (i.escalation_pending) return `↑ escalate? (${i.review_rejections} review rejections)`;
+  return '';
+}
+
 function flowView() {
   const its = F.items, R = F.round, cols = layers(its, FB);
   const wait = i => i.kind === 'waiting' ? 'waits on ' + i.waits.map(x => '#' + x).join(' ') : i.kind === 'gate' ? 'waits for the user'
@@ -888,7 +1007,8 @@ function flowView() {
   const node = i => `<div class="node ${i.kind === 'now' ? 'pulse' : ''}" data-id="${esc(i.id)}" data-retry="${+i.retries}" style="--k:${kc(i.kind)}" title="${esc(i.state)}">
     <div class="nh"><span class="id">#${esc(i.id)}</span><span class="badge">${LK[i.kind]}</span><span class="tr">${+i.tries ? i.tries + (+i.tries > 1 ? ' tries' : ' try') : ''}</span></div>
     <div class="nn">${esc(i.title)}</div>${wait(i) ? `<div class="w">${esc(short(wait(i), 60))}</div>` : ''}
-    ${+i.retries ? `<div class="w" style="color:${C.blocked}">↺ failed VERIFY ${i.retries}x, retried</div>` : ''}</div>`;
+    ${retryLabel(i) ? `<div class="w" style="color:${i.verify_failures ? C.blocked : 'var(--dim)'}">${esc(retryLabel(i))}</div>` : ''}
+    ${escalationLabel(i) ? `<div class="w" style="color:${i.escalation_pending ? C.unblocked : C.tag}">${esc(escalationLabel(i))}</div>` : ''}</div>`;
   const on = v => v === null ? 'unknown' : v ? 'running' : 'stopped';
   const E = F.execution;
   const sys = E ? `<div class="col"><div class="col-h">native execution</div>
@@ -915,7 +1035,7 @@ function flowView() {
   });
   requestAnimationFrame(() => edges(FB, $('#lf'), extra));
   $('#llegend').innerHTML = Object.keys(LK).map(k => `<span><i style="background:${kc(k)}"></i>${LK[k]}</span>`).join('') +
-    `<span><i style="background:${C.blocked};border-radius:1px;height:3px"></i>retry (failed VERIFY)</span><span><i style="background:${C.now};border-radius:1px;height:3px"></i>live round</span>`;
+    `<span><i style="background:${C.blocked};border-radius:1px;height:3px"></i>retry (additional attempt)</span><span><i style="background:${C.now};border-radius:1px;height:3px"></i>live round</span>`;
   fpane(FB[fSel] ? fSel : F.current || its[0]?.id);
 }
 
@@ -925,7 +1045,8 @@ function fpane(id) {
   const users = F.items.filter(x => x.deps.includes(id));
   const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc(FB[x]?.title || '')}</button>`;
   P.style.setProperty('--k', kc(i.kind));
-  P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.title)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+  P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.title)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)}${i.note ? ` (${esc(i.note)})` : ''} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+    ${i.escalated || i.escalation_pending || i.review_rejections ? `<div class="callout"><b>${i.escalation_pending ? 'Escalation awaiting approval' : i.escalated ? 'Worker escalated' : 'Reviewer rejections'}</b>${esc(i.escalations?.length ? i.escalations.join(' · ') : `${i.review_rejections} reviewer rejection${i.review_rejections === 1 ? '' : 's'}`)}</div>` : ''}
     <details class="full"><summary>full item text</summary><div class="bd">${rich(i.what)}</div></details>
     ${i.deps.length ? `<h3>Depends on</h3><div class="deps">${i.deps.map(btn).join('')}</div>` : ''}
     ${i.waits.length && i.kind !== 'done' ? `<h3>Waits on</h3><div class="deps">${i.waits.map(btn).join('')}</div>` : ''}
@@ -1164,28 +1285,26 @@ function drawUsage() {
   if (!G) return;
   const S = usageNodes();
   const sum = (a, f) => a.reduce((t, x) => t + f(x), 0);
-  const totalCost = sum(S, s => s.cost || 0);
   const allTok = sum(S, s => s.tokens || 0);
   const reads = sum(S, s => (s.tok && s.tok[2]) || 0);
   const rewrites = sum(S, s => s.rewrites || 0);
-  const hasUsd = totalCost > 0;
-  const metric = s => hasUsd ? (s.cost || 0) : (s.tokens || 0);
+  const metric = s => s.tokens || 0;
 
   const byMode = {};
   S.forEach(s => {
-    const m = byMode[s.mode] ||= {cost: 0, metric: 0, n: 0, p: 0, w: 0};
-    m.cost += s.cost || 0; m.metric += metric(s); m.n++;
+    const m = byMode[s.mode] ||= {metric: 0, n: 0, p: 0, w: 0};
+    m.metric += metric(s); m.n++;
     m.p += s.processed ?? s.tokens ?? 0; m.w += s.written ?? (s.tok ? s.tok[1] : 0);
   });
   const modes = Object.keys(byMode).sort((a, b) => (byMode[b].metric - byMode[a].metric) || (byMode[b].p - byMode[a].p));
-  const steer = byMode['steering a loop']?.cost || 0;
-  const steerShare = totalCost > 0 ? steer / totalCost : 0;
+  const steer = byMode['steering a loop']?.metric || 0;
+  const steerShare = allTok > 0 ? steer / allTok : 0;
 
   $('#ukpis').innerHTML = [
-    [knownCost(S), '', 'estimated spend', false],
+    [usageAmount(S), '', 'usage (est. price)', false],
     [fmtN(allTok), '', 'tokens processed', false],
     [allTok ? Math.round(reads / allTok * 100) + '%' : '0%', '', 'cache re-read (normal ~95%)', false],
-    [hasUsd ? Math.round(steerShare * 100) + '%' : 'unknown', '', 'spent steering loops', steerShare > 0.2],
+    [Math.round(steerShare * 100) + '%', '', 'tokens steering loops', steerShare > 0.2],
     [rewrites, '', 'cache rewrites after pause', false],
     [S.length, '', 'sessions', false]
   ].map(([v, e, l, w]) => `<div class="kpi"><b class="${w ? 'warn' : ''}">${esc(v)}<em>${esc(e)}</em></b><span>${esc(l)}</span></div>`).join('');
@@ -1195,8 +1314,8 @@ function drawUsage() {
   $('#umodes').innerHTML = modes.length ? modes.map(m => {
     const x = byMode[m], ratio = x.w ? Math.round(x.p / x.w) : '-';
     return `<div class="urow"><span class="n" title="${esc(m)}">${esc(m)} · ${x.n}</span>
-      <div class="utrack" style="background:none"><i style="width:${x.metric / maxMode * 100}%;background:${modeColor(m)}" title="${knownCost(S.filter(s => s.mode === m))}"></i></div>
-      <span class="x">${knownCost(S.filter(s => s.mode === m))} · ${ratio}×</span></div>`;
+      <div class="utrack" style="background:none"><i style="width:${x.metric / maxMode * 100}%;background:${modeColor(m)}" title="${usageAmount(S.filter(s => s.mode === m))}"></i></div>
+      <span class="x">${usageAmount(S.filter(s => s.mode === m))} · ${ratio}×</span></div>`;
   }).join('') : '<p class="note">no sessions in this window/project</p>';
 
   function columns(el, tickEl, keys, keyOf, label) {
@@ -1204,8 +1323,7 @@ function drawUsage() {
     S.forEach(s => { const k = keyOf(s); if (k == null || !(k in b)) return; b[k][s.mode] = (b[k][s.mode] || 0) + metric(s); });
     const max = Math.max(...keys.map(k => sum(Object.values(b[k]), x => x)), 1e-9);
     $(el).innerHTML = keys.length ? keys.map(k => {
-      const tot = sum(Object.values(b[k]), x => x);
-      const tip = `${label(k)} · ${hasUsd ? usd(tot) : fmtN(tot) + ' tok'}`;
+      const tip = `${label(k)} · ${usageAmount(S.filter(s => keyOf(s) === k))}`;
       return `<div title="${esc(tip)}">${modes.filter(m => b[k][m]).map(m => `<i style="height:${b[k][m] / max * 140}px;background:${modeColor(m)}"></i>`).join('')}</div>`;
     }).join('') : '<p class="note" style="margin:auto">no data</p>';
     const every = Math.max(1, Math.ceil(keys.length / 12));
@@ -1225,14 +1343,12 @@ function drawUsage() {
 
   const byProj = {};
   S.forEach(s => { const p = cleanProj(s.project); byProj[p] = (byProj[p] || 0) + metric(s); });
-  const projCost = {};
-  S.forEach(s => { const p = cleanProj(s.project); projCost[p] = (projCost[p] || 0) + (s.cost || 0); });
   const projs = Object.keys(byProj).sort((a, b) => byProj[b] - byProj[a]).slice(0, 14);
   const maxP = Math.max(...projs.map(p => byProj[p]), 1e-9);
   $('#uprojects').innerHTML = projs.length ? projs.map(p =>
     `<div class="urow click" data-uproj="${esc(p)}" title="Filter board to ${esc(p)}"><span class="n">${esc(p)}</span>
       <div class="utrack" style="background:none"><i style="width:${byProj[p] / maxP * 100}%;background:var(--tag)"></i></div>
-      <span class="x">${hasUsd ? usd(projCost[p]) : fmtN(byProj[p])}</span></div>`
+      <span class="x">${usageAmount(S.filter(s => cleanProj(s.project) === p))}</span></div>`
   ).join('') : '<p class="note">no projects</p>';
   $$('[data-uproj]').forEach(row => row.onclick = () => {
     $('#proj-sel').value = row.dataset.uproj;

@@ -133,6 +133,11 @@ Source: [Which Claude model should you build with?](https://claude.dev/blog/whic
   calls stay on the main model.
 - **Starting point when unsure:** Opus 5.5 at medium; Sonnet 5.5 for bounded work against a spec; Fable 5.2 for the
   hardest or longest unattended runs.
+- **Conditional worker escalation (opt-in):** when a run pairs a cheaper worker with a stronger reviewer, escalating
+  the worker only after repeated reviewer rejections (e.g. 2 rejections, always on a clean cut with only the contract,
+  diff, and rejection reasons) avoids paying the stronger model up front while cutting cheap retry loops. Keep it off
+  by default and verify per provider/model pair; when the reviewer becomes the worker, rely on a deterministic check or
+  a human gate to close.
 
 ## What does not pay off
 
@@ -144,3 +149,6 @@ Source: [Which Claude model should you build with?](https://claude.dev/blog/whic
 - Whether an agent inside a workflow accepts a worktree isolation option or has to be asked in its prompt.
 - The `PreToolUse` + `defer` + `--resume` circuit on a real `git push` (the docs show it with a user question).
 - How much the `/goal` judge weighs on the quota over a long session.
+- Whether opt-in worker escalation after repeated reviewer rejections beats starting on the stronger model across
+  different providers and model pairs (track escalated `done` vs `BLOCKED` outcomes on the board before making it a
+  default).

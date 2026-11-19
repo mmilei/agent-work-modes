@@ -15,6 +15,7 @@ jobs:
       - name: Tests
         run: |
           for t in skills/agent-work-modes/scripts/test_*.py; do python "$t"; done
+          node skills/agent-work-modes/scripts/test_usage.js
       - name: Page is up to date
         run: |
           python skills/agent-work-modes/scripts/render.py

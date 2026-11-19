@@ -1,5 +1,7 @@
 """Live board & session graph checks: python skills/agent-work-modes/scripts/test_loop_status.py."""
 import importlib.util
+import contextlib
+import io
 import json
 import socket
 import sqlite3
@@ -281,6 +283,17 @@ def test_items_three_columns():
         assert current == "2"
 
 
+def test_state_note_in_parentheses_keeps_the_state():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        (d / "LOOP-STATE.md").write_text("| # | Item | State |\n|---|---|---|\n| 1 | First | done (13df814) |\n| 2 | Second | todo |\n",
+                                          encoding="utf-8")
+        its, current = m.items(d)
+        assert [(i["state"], i["note"], i["kind"]) for i in its] == [("done", "13df814", "done"), ("todo", "", "now")]
+        assert current == "2"
+
+
 def test_native_execution():
     m = load_mod()
     with tempfile.TemporaryDirectory() as tmp:
@@ -331,7 +344,199 @@ def test_native_execution():
         assert "old-private-id" not in (out / "flow.json").read_text(encoding="utf-8"), "refresh strips old snapshot IDs"
 
 
+def test_review_attempts_are_not_verify_failures():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        m.LOOP = Path(tmp)
+        m.args.snapshot = True
+        (m.LOOP / "LOOP-STATE.md").write_text(
+            "Tries counts review deliveries.\n\n| # | Item | State | Tries |\n|---|---|---|---|\n"
+            "| 1 | Review returned twice | done | 3 |\n| 2 | Check failed once | done | 2 |\n", encoding="utf-8")
+        (m.LOOP / "LOOP-HISTORY.md").write_text(
+            "### 2026-01-01 10:00 - item 1: Review returned\nVERIFY: PASS\nCode review: REVISE\n"
+            "### 2026-01-01 11:00 - item 2: Check failed\nVERIFY: FAIL\nexit code 1\n"
+            "### 2026-01-01 12:00 - item 2: Fixed\nVERIFY: PASS\n", encoding="utf-8")
+        items = m.flow_data()["items"]
+        assert items[0]["retries"] == 2 and items[0]["verify_failures"] == 0
+        assert items[1]["retries"] == 1 and items[1]["verify_failures"] == 1
+        labels = subprocess.check_output([
+            "node", "-e",
+            "const fs=require('node:fs'),vm=require('node:vm');"
+            "const html=fs.readFileSync(process.argv[1],'utf8');"
+            "vm.runInThisContext(html.match(/function retryLabel\\([^]*?\\n}/)[0]);"
+            "console.log(JSON.stringify(JSON.parse(process.argv[2]).map(retryLabel)));",
+            str(Path(SCRIPT).with_suffix(".html")), json.dumps(items)], text=True)
+        labels = json.loads(labels)
+        assert "failed VERIFY" not in labels[0] and "2" in labels[0], labels
+        assert "failed VERIFY 1x" in labels[1], labels
+
+
+def test_codex_rollout_counters():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        m.LOOP, m.CLAUDE, m.CODEX, m.HERMES = root, root / "claude", root / "codex", []
+        m.CODEX.mkdir()
+        (root / "loop-config.json").write_text(json.dumps({"max_tokens": 100000,
+            "execution": {"mode": "native", "session": "synthetic-chat"}}), encoding="utf-8")
+        def write(name, usages, sid="synthetic-chat", parent=""):
+            events = [{"type": "session_meta", "timestamp": "2026-01-01T00:00:00Z",
+                       "payload": {"id": sid, "parent_thread_id": parent, "cwd": "/synthetic"}}]
+            for index, (total, last) in enumerate(usages):
+                events.append({"type": "event_msg", "timestamp": f"2026-01-01T00:0{name[-1]}:{index:02d}Z",
+                    "payload": {"type": "token_count", "info": {"total_token_usage": total, "last_token_usage": last}}})
+            (m.CODEX / (name + ".jsonl")).write_text("\n".join(map(json.dumps, events)), encoding="utf-8")
+            m._cache.clear()
+        def counts(n):
+            return {"input_tokens": n, "output_tokens": n // 10, "cached_input_tokens": n // 2,
+                    "cache_write_input_tokens": 0}
+        def check(stage):
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = m.usage_check(stage)
+            record = json.loads((root / "orchestrator-usage.jsonl").read_text().splitlines()[-1])
+            return status, record
+        write("rollout1", [(counts(1000), counts(1000))])
+        write("child4", [(counts(100), counts(100))], sid="synthetic-child", parent="synthetic-chat")
+        assert check("baseline")[0] == 0
+        write("rollout2", [(counts(100), counts(100)), (counts(200), counts(100))])
+        status, record = check("new-file-same-chat")
+        assert status == 0, record["reasons"]
+        assert record["cumulative_orchestrator"] == 1320, record
+        assert record["since_baseline"]["processed"] == 220, record
+        assert len(record["sessions"]) == 2
+        assert sum(record["sessions"]["x:synthetic-child"]["tok"]) == 110
+        log = root / "orchestrator-usage.jsonl"
+        saved = log.read_text()
+        old_baseline = json.loads(saved.splitlines()[0])
+        old_baseline["sessions"]["x:synthetic-chat"].pop("source_tokens")
+        log.write_text(json.dumps(old_baseline) + "\n")
+        assert check("baseline-without-rollout-coverage")[0] == 2
+        log.write_text(saved)
+        # A copied transcript must not double-charge the same usage events.
+        (m.CODEX / "copy.jsonl").write_bytes((m.CODEX / "rollout2.jsonl").read_bytes())
+        assert check("copied-file")[1]["cumulative_orchestrator"] == 1320
+        (m.CODEX / "copy.jsonl").unlink()
+        # Disappearing sources must keep the gate stopped until restored.
+        assert check("missing-source")[0] == 2
+        assert check("still-missing-source")[0] == 2
+        (m.CODEX / "copy.jsonl").write_bytes((m.CODEX / "rollout2.jsonl").read_bytes())
+        assert check("restored-source")[0] == 0
+        # Growth elsewhere must not hide a genuine decrease in an existing source.
+        write("rollout1", [(counts(900), counts(900))])
+        write("rollout2", [(counts(500), counts(500))])
+        status, record = check("real-decrease")
+        assert status == 2 and any("decreased" in r for r in record["reasons"]), record
+        assert check("still-decreased")[0] == 2
+        # A carried cumulative total is not evidence of an independent segment.
+        write("rollout3", [(counts(2000), counts(100))])
+        status, record = check("ambiguous-cumulative")
+        assert status == 2 and any("telemetry" in r for r in record["reasons"]), record
+
+
+def test_worker_escalation_config_and_flow():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        loop = Path(tmp)
+        m.LOOP = loop
+        m.args.snapshot = True
+        (loop / "LOOP-STATE.md").write_text(
+            "| # | Item | Depends | State | Tries |\n|---|------|---------|-------|-------|\n"
+            "| 1 | Escalated and done | - | done | 3 |\n"
+            "| 2 | Awaiting ask approval | 1 | todo | 2 |\n"
+            "| 3 | Escalated then blocked | 1 | BLOCKED: failed twice | 3 |\n", encoding="utf-8")
+        (loop / "LOOP-HISTORY.md").write_text(
+            "### 2026-11-18 10:00 - item 1: try 1\nREVIEW: REJECT\nmissing tests\n"
+            "### 2026-11-18 10:10 - item 1: try 2\nREVIEW: REJECTED\nstill broken\n"
+            "### 2026-11-18 10:20 - item 1: escalated to sonnet\nESCALATED: haiku -> sonnet after 2 reviewer rejections\n"
+            "### 2026-11-18 10:30 - item 1: done\nVERIFY: PASS\n"
+            "### 2026-11-18 10:40 - item 2: try 1\nREVIEW: REJECT\nneeds cleanup\n"
+            "### 2026-11-18 10:50 - item 2: try 2\nREVIEW: REJECT\nstill off\n"
+            "### 2026-11-18 11:00 - item 3: escalated to sonnet\nESCALATED: haiku -> sonnet after 2 reviewer rejections\n"
+            "### 2026-11-18 11:10 - item 3: BLOCKED\nVERIFY: FAIL\n", encoding="utf-8")
+
+        # Default off when no config exists
+        flow_off = m.flow_data()
+        assert flow_off["escalation"]["mode"] == "off" and flow_off["escalation"]["preset"] == "off"
+        assert flow_off["escalation"]["items"] == 2 and flow_off["escalation"]["done"] == 1
+        assert flow_off["escalation"]["blocked"] == 1 and flow_off["escalation"]["pending"] == 0
+
+        # Light preset (ask after 2) marks item #2 as awaiting approval
+        (loop / "loop-config.json").write_text(json.dumps({"rounds": 6, "max_tokens": 0, "max_usd": 0, "on_limit": "stop",
+                                                           "model": "haiku", "effort": ""}), encoding="utf-8")
+        m.set_config(json.dumps({"escalate_mode": "ask", "escalate_after": 2, "escalate_model": "sonnet",
+                                 "escalate_effort": "", "escalate_max_tries": 1, "escalate_reset": True}))
+        flow_ask = m.flow_data()
+        assert flow_ask["escalation"]["preset"] == "light" and flow_ask["escalation"]["pending"] == 1
+        by = {i["id"]: i for i in flow_ask["items"]}
+        assert by["1"]["escalated"] and by["1"]["review_rejections"] == 2
+        assert by["2"]["escalation_pending"] and not by["2"]["escalated"]
+        assert by["3"]["escalated"] and not by["3"]["escalation_pending"]
+
+        # Auto preset & Custom preset via set_config
+        m.set_config(json.dumps({"escalate_mode": "auto"}))
+        assert m.flow_data()["escalation"]["preset"] == "auto"
+        m.set_config(json.dumps({"escalate_after": 3, "escalate_effort": "medium", "escalate_max_tries": 2, "escalate_reset": False}))
+        flow_custom = m.flow_data()
+        assert flow_custom["escalation"]["preset"] == "custom" and flow_custom["escalation"]["effort"] == "medium"
+        assert flow_custom["escalation"]["max_tries"] == 2 and flow_custom["escalation"]["reset"] is False
+
+        # Reject invalid escalation payloads
+        for bad in (
+            {"escalate_mode": "maybe"},
+            {"escalate_after": -1},
+            {"escalate_max_tries": 0},
+            {"escalate_reset": "true"},
+            {"escalate_model": "bad;cmd"},
+            {"escalate_mode": "ask", "escalate_after": 0},
+            {"escalate_mode": "auto", "escalate_model": ""},
+        ):
+            try:
+                m.set_config(json.dumps(bad))
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"must reject invalid escalation config: {bad}")
+
+        # Turning off clears active mode without requiring a model
+        m.set_config(json.dumps({"escalate_mode": "off", "escalate_after": 0, "escalate_model": ""}))
+        assert m.flow_data()["escalation"]["mode"] == "off"
+
+        # Native mode keeps limits hidden while exposing read-only escalation policy
+        (loop / "loop-config.json").write_text(json.dumps({
+            "execution": {"mode": "native", "harness": "Codex", "provider": "OpenAI", "session": "s1",
+                          "status": "running", "stage": "Work", "updated_at": "2026-11-18T00:00:00Z"},
+            "escalate_mode": "ask", "escalate_after": 2, "escalate_model": "sonnet",
+            "escalate_effort": "", "escalate_max_tries": 1, "escalate_reset": True,
+        }), encoding="utf-8")
+        flow_native = m.flow_data()
+        assert flow_native["limits"] is None and flow_native["escalation"]["preset"] == "light"
+
+        # Verify client script syntax and escalation helper behavior in Node
+        js_out = subprocess.check_output([
+            "node", "-e",
+            "const fs=require('node:fs'),vm=require('node:vm');"
+            "const html=fs.readFileSync(process.argv[1],'utf8');"
+            "const script=html.match(/<script>([\\s\\S]*?)<\\/script>/)[1];"
+            "new vm.Script(script);"
+            "vm.runInThisContext(html.match(/function escalationPresetOf\\([^]*?\\n}/)[0]);"
+            "vm.runInThisContext(html.match(/function escalationLabel\\([^]*?\\n}/)[0]);"
+            "console.log(JSON.stringify(["
+            "escalationPresetOf({escalate_mode:'off',escalate_after:0}),"
+            "escalationPresetOf({escalate_mode:'ask',escalate_after:2,escalate_max_tries:1,escalate_reset:true}),"
+            "escalationPresetOf({escalate_mode:'auto',escalate_after:2,escalate_max_tries:1,escalate_reset:true}),"
+            "escalationPresetOf({escalate_mode:'auto',escalate_after:3,escalate_max_tries:2,escalate_reset:false}),"
+            "escalationLabel({escalated:true,escalations:['haiku -> sonnet']}),"
+            "escalationLabel({escalated:false,escalation_pending:true,review_rejections:2})"
+            "]));",
+            str(Path(SCRIPT).with_suffix(".html"))], text=True)
+        assert json.loads(js_out) == [
+            "off", "light", "auto", "custom", "↑ escalated", "↑ escalate? (2 review rejections)"
+        ], js_out
+
+
 if __name__ == "__main__":
+    test_review_attempts_are_not_verify_failures()
+    test_codex_rollout_counters()
     test_native_execution()
     test_flow_and_chat()
     test_config()
@@ -339,4 +544,6 @@ if __name__ == "__main__":
     test_session_graph()
     test_loop_dirs_isolation()
     test_items_three_columns()
+    test_state_note_in_parentheses_keeps_the_state()
+    test_worker_escalation_config_and_flow()
     print("ok")

@@ -1,0 +1,11 @@
+{
+  "CheckedAt": "2026-11-18T01:16:20.1963992-03:00",
+  "Port": 8774,
+  "OldProcessStopped": true,
+  "NewProcess": 34116,
+  "StartedAt": "2026-11-18T01:13:38.1275030-03:00",
+  "OriginalArgumentsPreserved": true,
+  "BindAddress": "127.0.0.1",
+  "StderrBytes": 0,
+  "KeptRunningAtUserRequest": true
+}

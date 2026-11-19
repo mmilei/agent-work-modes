@@ -783,7 +783,7 @@ function pane(l, by, id) {
   const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc((by[x]?.name || '').slice(0, 28))}</button>`;
   $('#pane').style.setProperty('--k', kc(k));
   $('#pane').innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.name)}</div>
-    <div class="ps">${esc(i.state)} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+    <div class="ps">${esc(i.state)}${i.note ? ` (${esc(i.note)})` : ''} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
     ${i.deps.length ? `<h3>Depends on</h3><div class="deps">${i.deps.map(btn).join('')}</div>` : ''}
     ${users.length ? `<h3>Unblocks</h3><div class="deps">${users.map(u => btn(u.id)).join('')}</div>` : ''}
     <h3>Evidence</h3>${ev.length ? ev.map(e => `<div class="pev" style="--k:${C[e.kind]}"><time>${dm(e.t)} ${hm(e.t)}</time><span class="kt">${KIND[e.kind]}</span>
@@ -935,7 +935,7 @@ function fpane(id) {
   const users = F.items.filter(x => x.deps.includes(id));
   const btn = x => `<button data-go="${esc(x)}">#${esc(x)} ${esc(FB[x]?.title || '')}</button>`;
   P.style.setProperty('--k', kc(i.kind));
-  P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.title)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
+  P.innerHTML = `<div class="pt">#${esc(i.id)}</div><div class="pn">${esc(i.title)}</div><div class="ps" style="margin-top:6px"><span class="badge">${LK[i.kind]}</span> ${esc(i.state)}${i.note ? ` (${esc(i.note)})` : ''} · ${i.tries} ${+i.tries === 1 ? 'try' : 'tries'}</div>
     <details class="full"><summary>full item text</summary><div class="bd">${rich(i.what)}</div></details>
     ${i.deps.length ? `<h3>Depends on</h3><div class="deps">${i.deps.map(btn).join('')}</div>` : ''}
     ${i.waits.length && i.kind !== 'done' ? `<h3>Waits on</h3><div class="deps">${i.waits.map(btn).join('')}</div>` : ''}

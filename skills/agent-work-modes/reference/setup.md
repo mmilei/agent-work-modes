@@ -140,7 +140,7 @@ usage files; a successful unit does not establish the quality or cost of the who
 Agree the kickoff items above first, then create in the repo:
 
 - `LOOP-STATE.md`: goal and agreed kickoff rules, followed by a table `| # | Item | Depends | State | Tries |` with
-  one row per item. State is `todo`, `done` or `BLOCKED: <why>`; put `VERIFY: <command>` in the Item cell (no `|`
+  one row per item. State is `todo`, `done` or `BLOCKED: <why>`, optionally with a note in parentheses (`done (3e8e07a)`) that the board shows on the card; put `VERIFY: <command>` in the Item cell (no `|`
   inside). Keep all items, including completed ones, so the driver can count the blocked fraction. The status board
   reads the same table. Kept short: it is re-read every round.
 - `LOOP-HISTORY.md`: evidence per item (command output, screenshot path). Never re-read by the loop.

@@ -283,6 +283,17 @@ def test_items_three_columns():
         assert current == "2"
 
 
+def test_state_note_in_parentheses_keeps_the_state():
+    m = load_mod()
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        (d / "LOOP-STATE.md").write_text("| # | Item | State |\n|---|---|---|\n| 1 | First | done (13df814) |\n| 2 | Second | todo |\n",
+                                          encoding="utf-8")
+        its, current = m.items(d)
+        assert [(i["state"], i["note"], i["kind"]) for i in its] == [("done", "13df814", "done"), ("todo", "", "now")]
+        assert current == "2"
+
+
 def test_native_execution():
     m = load_mod()
     with tempfile.TemporaryDirectory() as tmp:

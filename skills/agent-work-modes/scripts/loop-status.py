@@ -137,9 +137,12 @@ def items(loop=None):
             continue
         tries = row.get("tries", "0")
         tries = tries if tries.isdigit() else "0"
+        # `done (abc123)` is `done` plus a note (commit, date...): the note is card data, not a different state
+        m = re.fullmatch(r"(todo|done)\s*\((.*)\)", row["state"])
+        state, note = (m.group(1), m.group(2).strip()) if m else (row["state"], "")
         out.append({"id": row["id"], "name": row.get("name", ""),
                     "deps": re.findall(r"\b" + ID + r"\b", row.get("deps", "")),
-                    "state": row["state"], "tries": tries})
+                    "state": state, "note": note, "tries": tries})
     done = {it["id"] for it in out if it["state"] == "done"}
     current = next((it["id"] for it in out if it["state"] == "todo" and set(it["deps"]) <= done), None)
     for it in out:

@@ -189,4 +189,8 @@ assert code and rounds == 0 and "escalate_max_tries" in str(code), code
 code, rounds, _, _ = run(state("todo"), cap="1", history=two_rejects,
                          flags=["--cli", "codex exec", "--escalate-mode", "auto", "--escalate-after", "2", "--escalate-model", "sonnet"])
 assert code and rounds == 0 and "only supports the claude CLI" in str(code), code
+# A `running (stage)` row (several workers advancing at once) is a valid state: the driver neither rejects it nor skips it
+code, rounds, _, output = run(state("running (verify)", "todo"), cap="1")
+assert "invalid LOOP-STATE" not in output and rounds == 1, output
+
 print("ok")

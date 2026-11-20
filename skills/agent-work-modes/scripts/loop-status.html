@@ -314,12 +314,15 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
         <div class="legend" id="llegend"></div>
       </section>
 
-      <section class="two">
+      <!-- Chat hidden on 2026-11-20: the owner was not sure it works and did not need it. Its markup and JS stay
+           so it can come back by restoring class="two" here and removing `hidden` from #chat. Next time this file
+           is touched, ask the owner whether to keep it hidden, delete it (markup, JS, /chat endpoint), or bring it back. -->
+      <section>
         <div>
           <h2>Session log <small>rounds, commits and usage lines</small></h2>
           <div class="panel slog" id="slog"></div>
         </div>
-        <div id="chat">
+        <div id="chat" hidden>
           <h2>Chat <small>to the orchestrator · click a node or select text to attach it</small></h2>
           <div class="panel">
             <div class="msgs" id="msgs"></div>

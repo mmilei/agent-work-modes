@@ -96,7 +96,7 @@ if args.measure:
 
 ID_RE = r"(?:[A-Z]?\d+[a-z]?|[A-Z])"
 DASH_RE = r"[\u2014\u2013-]"
-STATE_RE = re.compile(r"(?:todo|done)(?:\s*\([^)]*\))?|BLOCKED.*")
+STATE_RE = re.compile(r"(?:todo|done|running)(?:\s*\([^)]*\))?|BLOCKED.*")
 
 
 def check_blocked():
@@ -121,7 +121,7 @@ def check_blocked():
         sys.exit(f"fresh-loop: {blocked}/{len(rows)} items BLOCKED; returning to the user")
     done = {item_id for item_id, _, s in rows if re.fullmatch(r"done(?:\s*\([^)]*\))?", s)}
     return next((item_id for item_id, deps, s in rows
-                 if re.fullmatch(r"todo(?:\s*\([^)]*\))?", s) and set(deps) <= done), None)
+                 if re.fullmatch(r"(?:todo|running)(?:\s*\([^)]*\))?", s) and set(deps) <= done), None)
 
 
 def item_escalation_counts(item_id):
@@ -226,7 +226,7 @@ def repo_state():
 
 
 def check_passes():
-    return subprocess.run(args.check, shell=True).returncode == 0
+    return subprocess.run(args.check, shell=True, stdin=subprocess.DEVNULL).returncode == 0  # a check that opens a REPL gets EOF, not a hang
 
 
 def round_flags(model, effort):

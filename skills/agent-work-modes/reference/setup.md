@@ -169,8 +169,10 @@ usage files; a successful unit does not establish the quality or cost of the who
 Agree the kickoff items above first, then create in the repo:
 
 - `LOOP-STATE.md`: goal and agreed kickoff rules, followed by a table `| # | Item | Depends | State | Tries |` with
-  one row per item. State is `todo`, `done` or `BLOCKED: <why>`, optionally with a note in parentheses (`done (3e8e07a)`) that the board shows on the card; put `VERIFY: <command>` in the Item cell (no `|`
-  inside). Keep all items, including completed ones, so the driver can count the blocked fraction. The status board
+  one row per item. State is `todo`, `running`, `done` or `BLOCKED: <why>`, optionally with a note in parentheses (`done (3e8e07a)`) that the board shows on the card; put `VERIFY: <command>` in the Item cell (no `|`
+  inside). `running (<stage>)` marks an item being worked in the current round, so the board shows every parallel
+  worker; the driver and the check count it as pending. Return it to `todo (<stage>)` or `done` before the round ends:
+  a `running` row that outlives its round is a round that was cut short. Keep all items, including completed ones, so the driver can count the blocked fraction. The status board
   reads the same table. Kept short: it is re-read every round.
 - `LOOP-HISTORY.md`: evidence per item (command output, screenshot path). Never re-read by the loop.
 
@@ -198,6 +200,11 @@ session, so prefer the fresh-session loop for long runs.
    Otherwise use the positive remainder (not the original cap):
    `python fresh-loop.py --prompt PROMPT.md --check "<check>" --rounds <remaining-round-cap> --lean -- --permission-mode auto`.
    `touch STOP` ends it cleanly between rounds.
+   On Windows, two traps when launching from PowerShell: `Start-Process python -ArgumentList @(...)` joins the
+   elements with spaces and drops the quotes, so `--check "python check.py"` arrives as `--check python check.py`;
+   pass one string with the quotes written in it. And in a workspace Claude Code has not trusted, `claude -p` ignores
+   `permissions.allow` and `additionalDirectories` from `.claude/settings.json` (stderr says "this workspace has not
+   been trusted"), so pass the gate as flags after `--` too: `--allowedTools`, `--disallowedTools`, `--add-dir`.
    With another agent from `orchestration` (SKILL.md 1b), pass its headless command and its own flags, without
    `--lean` or `--measure`: `--cli "codex exec" -- -m <id>`, `--cli "gemini -p" -- -m <id>`. Check the flags with the
    CLI's `--help` first, and in particular how it allows edits and shell commands without asking.

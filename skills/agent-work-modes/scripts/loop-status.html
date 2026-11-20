@@ -168,9 +168,11 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .pb .track{height:10px;background:var(--line);border-radius:5px;overflow:hidden;display:flex;margin-top:7px}
 .pb .track i{display:block;height:100%}
 .pb .tries{display:flex;gap:2px;align-items:flex-end;height:30px;margin-top:7px}.pb .tries i{flex:1;min-width:2px;border-radius:2px 2px 0 0}
-.lfg{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px;align-items:start}
+.lfg{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
 .lfg > div{min-width:0}
-@media(max-width:1100px){.lfg{grid-template-columns:minmax(0,1fr)}}
+.lfg .pane{position:static;max-height:none}
+.wide{width:calc(100vw - 48px);margin-left:calc(50% - 50vw + 24px)}
+#lf{transform-origin:0 0}
 .pane .bd,.pane code.v{overflow-wrap:anywhere}
 #lf{gap:44px}#lf .col{width:210px;justify-content:flex-start}
 .badge{font:600 9.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--k);color:var(--k);border-radius:20px;padding:0 6px;white-space:nowrap}
@@ -302,8 +304,9 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
         <div class="panel" id="limits"></div>
       </section>
 
-      <section>
-        <h2>Flow <small>one node per item, laid out by Depends · click a node for its VERIFY and evidence</small></h2>
+      <section class="wide">
+        <h2>Flow <small>one node per item, laid out by Depends · click a node for its VERIFY and evidence</small>
+          <button type="button" class="tab" id="lfit" style="padding:4px 10px;font-size:12px;margin-left:10px"></button></h2>
         <div class="lfg">
           <div class="panel flowwrap" id="lfw"></div>
           <aside class="pane" id="lpane"><p class="note">click a node</p></aside>
@@ -311,12 +314,15 @@ footer{color:var(--faint);font-size:12px;margin-top:36px}
         <div class="legend" id="llegend"></div>
       </section>
 
-      <section class="two">
+      <!-- Chat hidden on 2026-11-20: the owner was not sure it works and did not need it. Its markup and JS stay
+           so it can come back by restoring class="two" here and removing `hidden` from #chat. Next time this file
+           is touched, ask the owner whether to keep it hidden, delete it (markup, JS, /chat endpoint), or bring it back. -->
+      <section>
         <div>
           <h2>Session log <small>rounds, commits and usage lines</small></h2>
           <div class="panel slog" id="slog"></div>
         </div>
-        <div id="chat">
+        <div id="chat" hidden>
           <h2>Chat <small>to the orchestrator · click a node or select text to attach it</small></h2>
           <div class="panel">
             <div class="msgs" id="msgs"></div>
@@ -747,10 +753,12 @@ function layers(its, by) {
 function edges(by, flow = $('#flow'), extra = []) {
   if (!flow) return; const svg = flow.querySelector('svg.edges');
   const R = flow.getBoundingClientRect(); if (!R.width) return;
+  const s = R.width / flow.offsetWidth || 1; // the live flow may be scaled to fit the screen
   const pos = {};
   flow.querySelectorAll('.node').forEach(n => { const r = n.getBoundingClientRect();
-    pos[n.dataset.id] = {l: r.left - R.left, r: r.right - R.left, t: r.top - R.top, b: r.bottom - R.top, y: r.top - R.top + r.height / 2}; });
-  svg.setAttribute('width', R.width); svg.setAttribute('height', R.height);
+    const l = (r.left - R.left) / s, t = (r.top - R.top) / s, w = r.width / s, h = r.height / s;
+    pos[n.dataset.id] = {l, r: l + w, t, b: t + h, y: t + h / 2}; });
+  svg.setAttribute('width', R.width / s); svg.setAttribute('height', R.height / s);
   const pairs = Object.values(by).flatMap(i => i.deps.filter(x => pos[x]).map(x => [x, i.id, by[x].kind === 'done' ? 'done' : '']));
   extra.forEach(p => pos[p[0]] && pos[p[1]] && pairs.push(p));
   const mk = `ah-${flow.id}`;
@@ -1027,6 +1035,7 @@ function flowView() {
   $('#lfw').innerHTML = `<div class="flow" id="lf"><svg class="edges"></svg>${sys}
     ${cols.map((c, ci) => `<div class="col"><div class="col-h">${ci === 0 ? 'no dependencies' : 'level ' + ci}</div>${c.map(node).join('')}</div>`).join('')}</div>`;
   $('#lfw').scrollLeft = keep;
+  fitFlow();
   const extra = E ? [['_driver', R.item, '']] : [['_driver', '_round', 'live'], ['_round', R.item, R.live ? 'live' : ''], ...R.agents.slice(-6).map((_, j) => ['_round', '_sa' + j, 'live'])];
   $('#lf').querySelectorAll('.node').forEach(n => {
     n.onclick = () => { const i = FB[n.dataset.id]; if (i) { fpane(i.id); setRef('node', {type: 'node', id: i.id, state: i.state, label: '#' + i.id}); }
@@ -1038,6 +1047,22 @@ function flowView() {
     `<span><i style="background:${C.blocked};border-radius:1px;height:3px"></i>retry (additional attempt)</span><span><i style="background:${C.now};border-radius:1px;height:3px"></i>live round</span>`;
   fpane(FB[fSel] ? fSel : F.current || its[0]?.id);
 }
+
+// "fit to screen": scale the whole flow down so every column and node is visible without scrolling
+const FIT_MIN = 0.8;
+let fitOn = true; try { fitOn = localStorage.getItem('lfit') !== '0'; } catch (e) {}
+function fitFlow() {
+  const W = $('#lfw'), lf = $('#lf'), b = $('#lfit'); if (!lf) return;
+  b.textContent = fitOn ? 'actual size' : 'fit to screen';
+  const cs = getComputedStyle(W), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  if (!fitOn || !lf.offsetWidth) return;
+  // never below FIT_MIN, so cards stay readable; a flow still too wide scrolls horizontally
+  const s = Math.max(FIT_MIN, Math.min(1, (W.clientWidth - padX) / lf.offsetWidth, (innerHeight - 120) / lf.offsetHeight));
+  // a transform keeps the layout box, so negative margins shrink it to the scaled size for scrolling
+  lf.style.transform = `scale(${s})`;
+  lf.style.marginRight = -(1 - s) * lf.offsetWidth + 'px'; lf.style.marginBottom = -(1 - s) * lf.offsetHeight + 'px';
+}
+$('#lfit').onclick = () => { fitOn = !fitOn; try { localStorage.setItem('lfit', fitOn ? '1' : '0'); } catch (e) {} if (F && F.items?.length) flowView(); };
 
 function fpane(id) {
   const i = FB[id], P = $('#lpane'); if (!i) return; fSel = id;

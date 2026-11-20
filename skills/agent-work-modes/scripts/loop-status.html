@@ -172,7 +172,7 @@ h3{font:600 12px Inter,sans-serif;color:var(--dim);text-transform:uppercase;lett
 .lfg > div{min-width:0}
 .lfg .pane{position:static;max-height:none}
 .wide{width:calc(100vw - 48px);margin-left:calc(50% - 50vw + 24px)}
-#lfw.fit{overflow:hidden}#lf{transform-origin:0 0}
+#lf{transform-origin:0 0}
 .pane .bd,.pane code.v{overflow-wrap:anywhere}
 #lf{gap:44px}#lf .col{width:210px;justify-content:flex-start}
 .badge{font:600 9.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--k);color:var(--k);border-radius:20px;padding:0 6px;white-space:nowrap}
@@ -1046,16 +1046,18 @@ function flowView() {
 }
 
 // "fit to screen": scale the whole flow down so every column and node is visible without scrolling
+const FIT_MIN = 0.8;
 let fitOn = true; try { fitOn = localStorage.getItem('lfit') !== '0'; } catch (e) {}
 function fitFlow() {
   const W = $('#lfw'), lf = $('#lf'), b = $('#lfit'); if (!lf) return;
   b.textContent = fitOn ? 'actual size' : 'fit to screen';
-  W.classList.toggle('fit', fitOn); lf.style.transform = ''; W.style.height = '';
-  const cs = getComputedStyle(W), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight),
-    padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const cs = getComputedStyle(W), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   if (!fitOn || !lf.offsetWidth) return;
-  const s = Math.min(1, (W.clientWidth - padX) / lf.offsetWidth, (innerHeight - 120) / lf.offsetHeight);
-  lf.style.transform = `scale(${s})`; W.style.height = lf.offsetHeight * s + padY + 'px';
+  // never below FIT_MIN, so cards stay readable; a flow still too wide scrolls horizontally
+  const s = Math.max(FIT_MIN, Math.min(1, (W.clientWidth - padX) / lf.offsetWidth, (innerHeight - 120) / lf.offsetHeight));
+  // a transform keeps the layout box, so negative margins shrink it to the scaled size for scrolling
+  lf.style.transform = `scale(${s})`;
+  lf.style.marginRight = -(1 - s) * lf.offsetWidth + 'px'; lf.style.marginBottom = -(1 - s) * lf.offsetHeight + 'px';
 }
 $('#lfit').onclick = () => { fitOn = !fitOn; try { localStorage.setItem('lfit', fitOn ? '1' : '0'); } catch (e) {} if (F && F.items?.length) flowView(); };
 
